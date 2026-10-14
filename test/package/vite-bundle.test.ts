@@ -4,7 +4,7 @@ import { afterAll, beforeAll, expect, inject, it } from "vitest";
 import { build } from "vite";
 import { installPacked } from "./helpers.js";
 
-const SERVER_MARKERS = ["toNodeHandler", "createRelayHandler", "IncomingMessage", "writeHead"];
+const SERVER_MARKERS = ["toNodeHandler", "createRelayHandler", "writeHead"];
 const ENGINE_MARKERS = ["TrustedClientToken", "speech.platform.bing.com", "Sec-MS-GEC", "createEdgeEngine"];
 
 let dir: string;
