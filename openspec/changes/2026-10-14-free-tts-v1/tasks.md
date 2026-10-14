@@ -242,9 +242,9 @@ export interface SchedulerConfig { concurrency: number; tiers: { name: string; c
 - "removed job never starts"
 - "unknown tier throws"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/__tests__/scheduler.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat: tiered scheduler with cumulative caps"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/__tests__/scheduler.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat: tiered scheduler with cumulative caps"`
 
 ### Task 10: createTts — synthesize, prefetch, join, retry, abort
 
