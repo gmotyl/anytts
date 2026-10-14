@@ -123,9 +123,9 @@ export interface Transport { open(url: string, headers: Record<string, string>):
 - "node transport sends Origin and User-Agent"
 - "browser transport passes no headers argument"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/transport` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat(edge): injectable WebSocket transport"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/transport` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat(edge): injectable WebSocket transport"`
 
 ### Task 6: Edge engine attempt — deadlines, failure mapping, clock skew
 
