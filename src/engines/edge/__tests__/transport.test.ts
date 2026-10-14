@@ -5,6 +5,20 @@ import { defaultTransport } from "../transport.js";
 
 const EDGE_ORIGIN = "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold";
 
+function refuseUpgrade(response: string): Promise<string> {
+  return new Promise((resolveServer) => {
+    const server = createServer();
+    server.on("upgrade", (_req, socket) => {
+      socket.end(response);
+      server.close();
+    });
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address() as AddressInfo;
+      resolveServer(`ws://127.0.0.1:${port}/edge/v1`);
+    });
+  });
+}
+
 function captureUpgradeHeaders(): Promise<{ url: string; headers: Promise<IncomingHttpHeaders> }> {
   return new Promise((resolveServer) => {
     const server = createServer();
@@ -34,5 +48,19 @@ describe("defaultTransport (node)", () => {
     expect(edg).not.toBeNull();
     expect(Number(edg?.[1])).toBeGreaterThanOrEqual(137);
     expect(seen["x-extra"]).toBe("1");
+  });
+
+  it("node transport reports the refused handshake status and Date", async () => {
+    const date = "Wed, 14 Oct 2026 12:00:00 GMT";
+    const url = await refuseUpgrade(
+      `HTTP/1.1 403 Forbidden\r\nDate: ${date}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n`,
+    );
+    const seen = new Promise<{ status: number; date: string | null }>((resolve) => {
+      const socket = defaultTransport.open(url, {}, {
+        onUnexpectedResponse: (status, headers) => resolve({ status, date: headers.get("date") }),
+      });
+      socket.addEventListener("error", () => {});
+    });
+    expect(await seen).toEqual({ status: 403, date });
   });
 });

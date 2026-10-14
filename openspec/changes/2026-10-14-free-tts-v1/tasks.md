@@ -166,9 +166,9 @@ export interface EdgeEngineOptions { firstByteMs?: number; stallMs?: number; tra
 - "a rejection with a Date header corrects clock skew once"
 - "a second rejection after skew correction is final"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/engine.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat(edge): engine attempt with deadlines and typed failures"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/engine.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat(edge): engine attempt with deadlines and typed failures"`
 
 ### Task 7: Voice catalog and engine listing
 
