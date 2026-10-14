@@ -1,2 +1,2 @@
-// Placeholder; public API lands in later tasks.
-export {};
+export { firstSentence, packUnits } from "./units.js";
+export type { PackOptions, Unit } from "./units.js";
