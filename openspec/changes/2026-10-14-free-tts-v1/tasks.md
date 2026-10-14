@@ -488,8 +488,8 @@ export function firstSentence(text: string): string | null;
 
 **Verification: non-testable** (the test *is* the deliverable) — Run: `pnpm test:live` — Expected: PASS against Microsoft; `pnpm test` shows no live test.
 
-- [ ] **Step 1: Write the live test + workflow, run both commands**
-- [ ] **Step 2: Commit** — `git commit -am "test: live Edge contract test and nightly workflow"`
+- [x] **Step 1: Write the live test + workflow, run both commands**
+- [x] **Step 2: Commit** — `git commit -am "test: live Edge contract test and nightly workflow"`
 
 ### Task 18: CI and release workflows
 
