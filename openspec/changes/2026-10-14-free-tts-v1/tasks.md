@@ -33,8 +33,8 @@ vitest projects: `node` (`src/**/__tests__/*.test.ts`, environment node), `jsdom
 
 **Verification: non-testable** — Run: `pnpm install && pnpm lint && pnpm build && pnpm test` — Expected: build emits `dist/index.js` and `dist/text/index.js`; vitest exits 0 with no test files treated as passing (`--passWithNoTests`).
 
-- [ ] **Step 1: Scaffold + verify** — commands above
-- [ ] **Step 2: Commit** — `git add -A && git commit -m "chore: scaffold free-tts package"`
+- [x] **Step 1: Scaffold + verify** — commands above
+- [x] **Step 2: Commit** — `git add -A && git commit -m "chore: scaffold free-tts package"`
 
 ### Task 2: Typed errors
 
