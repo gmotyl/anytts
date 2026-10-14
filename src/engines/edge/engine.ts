@@ -1,8 +1,9 @@
-import type { Engine, VoiceInfo } from "../../engine.js";
+import type { Engine } from "../../engine.js";
 import { TtsError } from "../../errors.js";
 import { buildConfigMessage, buildSsmlMessage, newRequestId, parseFrame } from "./protocol.js";
 import { createSecMsGecGenerator, SEC_MS_GEC_VERSION, TRUSTED_CLIENT_TOKEN } from "./token.js";
 import { defaultTransport, type Transport } from "./transport.js";
+import { EDGE_VOICES } from "./voices.js";
 
 export interface EdgeEngineOptions {
   /** Max wait for the first audio chunk, from opening the socket. */
@@ -17,9 +18,6 @@ export interface EdgeEngineOptions {
 const WSS_URL =
   "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1" +
   `?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}`;
-
-// Filled by the voice catalog.
-const EDGE_VOICES: readonly VoiceInfo[] = [];
 
 /** A failed attempt plus the server `Date` (ms) when the response carried one. */
 interface AttemptFailure {
