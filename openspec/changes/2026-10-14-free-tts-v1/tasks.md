@@ -77,9 +77,9 @@ export const isTransient: (kind: TtsErrorKind) => boolean; // true only for firs
 - "computes without Web Crypto"
 - "applies the clock offset"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/token.test.ts` — Expected: FAIL
-- [ ] **Step 2: Move the module in, generate vectors** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git add scripts src/engines/edge && git commit -m "feat(edge): Sec-MS-GEC v2 token with golden vectors"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/token.test.ts` — Expected: FAIL
+- [x] **Step 2: Move the module in, generate vectors** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git add scripts src/engines/edge && git commit -m "feat(edge): Sec-MS-GEC v2 token with golden vectors"`
 
 ### Task 4: Edge wire protocol
 
