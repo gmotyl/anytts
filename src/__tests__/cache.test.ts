@@ -46,4 +46,25 @@ describe("LruCache", () => {
     expect(first).toHaveLength(3);
     expect(second).toHaveBeenCalledTimes(5);
   });
+
+  it("a throwing subscriber does not break the cache", () => {
+    const cache = new LruCache<number>({ max: 1 });
+    const events: CacheEvent[] = [];
+    cache.subscribe(() => {
+      throw new Error("listener bug");
+    });
+    cache.subscribe((e) => events.push(e));
+    expect(() => cache.set("a", 1)).not.toThrow();
+    expect(() => cache.set("b", 2)).not.toThrow();
+    expect(cache.size).toBe(1);
+    expect(cache.has("a")).toBe(false);
+    expect(cache.get("b")).toBe(2);
+    expect(events).toEqual([
+      { type: "add", key: "a" },
+      { type: "add", key: "b" },
+      { type: "evict", key: "a" },
+    ]);
+    expect(() => cache.delete("b")).not.toThrow();
+    expect(events).toHaveLength(4);
+  });
 });

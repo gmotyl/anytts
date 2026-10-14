@@ -43,12 +43,14 @@ export class LruCache<V> {
   set(key: string, value: V): void {
     const existed = this.entries.delete(key);
     this.entries.set(key, value);
-    if (!existed) this.emit({ type: "add", key });
+    // Settle the entries before notifying, so listeners always see a cache within `max`.
+    const events: CacheEvent[] = existed ? [] : [{ type: "add", key }];
     while (this.entries.size > this.max) {
       const oldest = this.entries.keys().next().value as string;
       this.entries.delete(oldest);
-      this.emit({ type: "evict", key: oldest });
+      events.push({ type: "evict", key: oldest });
     }
+    for (const e of events) this.emit(e);
   }
 
   /** Removes an entry; reported to subscribers as an eviction. */
@@ -66,6 +68,13 @@ export class LruCache<V> {
   }
 
   private emit(e: CacheEvent): void {
-    for (const listener of [...this.listeners]) listener(e);
+    for (const listener of [...this.listeners]) {
+      // A faulty listener must not corrupt the cache or starve the other listeners.
+      try {
+        listener(e);
+      } catch {
+        // ignored
+      }
+    }
   }
 }

@@ -32,7 +32,24 @@ const abortError = (): Error =>
     ? new DOMException("The job was removed", "AbortError")
     : Object.assign(new Error("The job was removed"), { name: "AbortError" });
 
+function validate(config: SchedulerConfig): void {
+  const { concurrency, tiers } = config;
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new RangeError(`scheduler concurrency must be a positive integer, got ${concurrency}`);
+  }
+  if (tiers.length === 0) throw new RangeError("scheduler needs at least one tier");
+  const seen = new Set<string>();
+  for (const { name, cap } of tiers) {
+    if (seen.has(name)) throw new RangeError(`duplicate tier: ${name}`);
+    seen.add(name);
+    if (cap !== undefined && (!Number.isInteger(cap) || cap < 1)) {
+      throw new RangeError(`tier ${name} cap must be a positive integer, got ${cap}`);
+    }
+  }
+}
+
 export function createScheduler(config: SchedulerConfig): Scheduler {
+  validate(config);
   const tierIndex = new Map(config.tiers.map((t, i) => [t.name, i]));
   const caps = config.tiers.map((t) => t.cap);
   // inFlight[i] = running jobs of tier i

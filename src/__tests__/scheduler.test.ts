@@ -80,4 +80,17 @@ describe("createScheduler", () => {
     const job = scheduler.enqueue("play", async () => {});
     expect(() => job.promote("nope")).toThrow(/unknown tier/);
   });
+
+  it("invalid config throws", () => {
+    const tiers = [{ name: "play" }];
+    for (const concurrency of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => createScheduler({ concurrency, tiers })).toThrow(RangeError);
+    }
+    expect(() => createScheduler({ concurrency: 1, tiers: [] })).toThrow(RangeError);
+    expect(() => createScheduler({ concurrency: 1, tiers: [{ name: "play" }, { name: "play" }] })).toThrow(
+      /duplicate tier/,
+    );
+    expect(() => createScheduler({ concurrency: 1, tiers: [{ name: "play", cap: 0 }] })).toThrow(RangeError);
+    expect(() => createScheduler({ concurrency: 2, tiers: [{ name: "play" }, { name: "warm", cap: 1 }] })).not.toThrow();
+  });
 });
