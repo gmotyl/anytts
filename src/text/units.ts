@@ -30,7 +30,8 @@ export function firstSentence(text: string): string | null {
 /**
  * Pack paragraphs into synthesis units: consecutive paragraphs merge until a unit
  * reaches `min`, never past `max`. A paragraph longer than `max` is cut on sentence
- * boundaries, then words; every piece spans that paragraph's index.
+ * boundaries, then words; every piece spans that paragraph's index. Blank paragraphs are
+ * skipped. Throws `RangeError` unless `max` is an integer >= 1 and `0 <= min <= max`.
  */
 export function packUnits<T extends { text: string }>(
   paragraphs: readonly T[],
@@ -38,6 +39,10 @@ export function packUnits<T extends { text: string }>(
 ): Unit[] {
   const min = opts.min ?? DEFAULT_MIN;
   const max = opts.max ?? DEFAULT_MAX;
+  if (!Number.isInteger(max) || max < 1) throw new RangeError(`packUnits: max must be an integer >= 1, got ${max}`);
+  if (Number.isNaN(min) || min < 0 || min > max) {
+    throw new RangeError(`packUnits: min must be between 0 and max (${max}), got ${min}`);
+  }
   const units: Unit[] = [];
   let pending: Unit | null = null;
 
@@ -46,7 +51,10 @@ export function packUnits<T extends { text: string }>(
     pending = null;
   };
 
-  paragraphs.forEach(({ text }, index) => {
+  paragraphs.forEach((paragraph, index) => {
+    // Blank paragraphs are skipped on both paths, so no unit is ever empty or padded.
+    const text = paragraph.text.trim();
+    if (!text) return;
     if (text.length > max) {
       flush();
       for (const piece of cut(text, max)) units.push({ text: piece, from: index, to: index });

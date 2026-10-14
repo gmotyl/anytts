@@ -49,6 +49,36 @@ describe("packUnits", () => {
     }
     expect(fromWords.map((u) => u.text).join(" ")).toBe(words);
   });
+  it("invalid options throw", () => {
+    const paragraphs = [{ text: "abc." }];
+    for (const max of [0, -1, NaN, 1.5, Infinity]) {
+      expect(() => packUnits(paragraphs, { max })).toThrow(RangeError);
+    }
+    for (const min of [-1, NaN, 500]) {
+      expect(() => packUnits(paragraphs, { min, max: 450 })).toThrow(RangeError);
+    }
+    expect(() => packUnits(paragraphs, { min: 0, max: 1 })).not.toThrow();
+  });
+
+  it("blank paragraphs never become units", () => {
+    expect(packUnits([{ text: "" }])).toEqual([]);
+    expect(packUnits([{ text: "   " }, { text: "\n\t" }])).toEqual([]);
+    const units = packUnits([{ text: "     " }, { text: "abc." }, { text: "  " }, { text: "def." }]);
+    expect(units).toEqual([{ text: "abc. def.", from: 1, to: 3 }]);
+    const long = packUnits([{ text: " ".repeat(20) }, { text: "  abc.  " }], { min: 1, max: 10 });
+    expect(long).toEqual([{ text: "abc.", from: 1, to: 1 }]);
+    for (const unit of units.concat(long)) {
+      expect(unit.text).not.toBe("");
+      expect(unit.text).not.toMatch(/^\s|\s$/);
+    }
+  });
+
+  it("a single word longer than max is hard cut", () => {
+    const word = "x".repeat(1000);
+    const units = packUnits([{ text: word }], { min: 10, max: 300 });
+    expect(units.map((u) => u.text.length)).toEqual([300, 300, 300, 100]);
+    expect(units.map((u) => u.text).join("")).toBe(word);
+  });
 });
 
 describe("firstSentence", () => {
