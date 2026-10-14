@@ -294,9 +294,9 @@ export interface Tts {
 - "prefetch swallows failures"
 - "instances share no cache"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/__tests__/tts.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat: createTts with join, retry and abort"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/__tests__/tts.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat: createTts with join, retry and abort"`
 
 ### Task 11: resolveVoice
 
