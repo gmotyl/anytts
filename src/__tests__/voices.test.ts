@@ -64,6 +64,18 @@ describe("resolveVoice", () => {
     expect(resolveVoice(tts, { engine: "edge" })).toEqual({ voice: "en-US-AndrewMultilingualNeural", fellBack: false });
   });
 
+  it("nothing saved with a language resolves to the language voice", () => {
+    const tts = setup();
+    expect(resolveVoice(tts, { engine: "edge", lang: "pl" })).toEqual({ voice: "pl-PL-MarekNeural", fellBack: false });
+  });
+
+  it("a prototype key is not a language voice", () => {
+    const tts = setup();
+    for (const lang of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+      expect(resolveVoice(tts, { engine: "edge", lang })).toEqual({ voice: "en-US-AndrewMultilingualNeural", fellBack: false });
+    }
+  });
+
   it("rejects an engine this instance does not configure", () => {
     const tts = setup();
     expect(() => resolveVoice(tts, { engine: "nope" })).toThrow(RangeError);

@@ -21,6 +21,6 @@ export function resolveVoice(tts: Tts, q: { engine: string; voice?: string; lang
   const entry = sources.get(tts)?.get(q.engine);
   if (!entry) throw new RangeError(`engine is not configured: ${q.engine}`);
   if (q.voice !== undefined && entry.catalog.some((v) => v.id === q.voice)) return { voice: q.voice, fellBack: false };
-  const fallback = (q.lang !== undefined ? entry.voices[q.lang] : undefined) ?? entry.voices.default;
+  const fallback = (q.lang !== undefined && Object.hasOwn(entry.voices, q.lang) ? entry.voices[q.lang] : undefined) ?? entry.voices.default;
   return { voice: fallback, fellBack: q.voice !== undefined };
 }

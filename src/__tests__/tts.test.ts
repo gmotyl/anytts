@@ -56,6 +56,15 @@ function setup(overrides: { retries?: number; concurrency?: number } = {}) {
 const fail = (kind: TtsErrorKind) => new TtsError(kind);
 
 describe("createTts", () => {
+  it("a prototype key is not a language voice", async () => {
+    const { tts, edge } = setup({ concurrency: 4 });
+    const pending = ["constructor", "toString", "__proto__"].map((lang, i) => tts.synthesize({ text: `p${i}`, lang }));
+    await flush();
+    expect(edge.calls.map((c) => c.voice)).toEqual(Array(3).fill("en-US-AndrewMultilingualNeural"));
+    for (const call of edge.calls) call.resolve(bytes(1));
+    await Promise.all(pending);
+  });
+
   it("voice resolution: explicit, then language map, then default", async () => {
     const { tts, edge } = setup({ concurrency: 4 });
     const explicit = tts.synthesize({ text: "a", lang: "pl", voice: "en-US-AndrewMultilingualNeural" });

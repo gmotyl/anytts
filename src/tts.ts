@@ -94,7 +94,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     const entry = engines.get(engineId);
     if (!entry) throw new RangeError(`engine is not configured: ${engineId}`);
     const { voices } = entry.config;
-    const voice = req.voice ?? (req.lang !== undefined ? voices[req.lang] : undefined) ?? voices.default;
+    const voice = req.voice ?? (req.lang !== undefined && Object.hasOwn(voices, req.lang) ? voices[req.lang] : undefined) ?? voices.default;
     if (!entry.engine.voices.some((v) => v.id === voice)) {
       throw new TtsError("unknown-voice", `voice ${voice} is not in the ${engineId} catalog`);
     }
