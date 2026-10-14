@@ -57,9 +57,9 @@ export const isTransient: (kind: TtsErrorKind) => boolean; // true only for firs
 - "TtsError carries its kind and is an Error"
 - "only first-byte-timeout, stalled and network are transient"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/__tests__/errors.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat: typed TtsError"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/__tests__/errors.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat: typed TtsError"`
 
 ### Task 3: Sec-MS-GEC v2 token
 
