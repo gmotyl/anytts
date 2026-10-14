@@ -8,6 +8,7 @@
   "engines": {
     "node": ">=22"
   },
+  "packageManager": "pnpm@10.18.1",
   "sideEffects": false,
   "files": [
     "dist"
@@ -27,7 +28,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "test": "vitest run --project node --project jsdom --project package",
     "test:live": "vitest run --project live",
     "lint": "tsc --noEmit"

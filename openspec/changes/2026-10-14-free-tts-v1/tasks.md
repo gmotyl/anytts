@@ -499,8 +499,8 @@ export function firstSentence(text: string): string | null;
 
 **Verification: non-testable** — Run: `pnpm lint && pnpm build && pnpm test` locally; `actionlint` on both workflows if available — Expected: green, workflows valid.
 
-- [ ] **Step 1: Write workflows + README, verify**
-- [ ] **Step 2: Commit** — `git commit -am "ci: test on PRs, publish on tags"`
+- [x] **Step 1: Write workflows + README, verify**
+- [x] **Step 2: Commit** — `git commit -am "ci: test on PRs, publish on tags"`
 
 ### Task 19: Publish 0.1.0 (user-gated)
 
