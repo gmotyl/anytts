@@ -1,6 +1,7 @@
 import type { Engine } from "../../engine.js";
 import { TtsError } from "../../errors.js";
 import { buildConfigMessage, buildSsmlMessage, newRequestId, parseFrame } from "./protocol.js";
+import { relaySynthesize } from "./relayClient.js";
 import { createSecMsGecGenerator, SEC_MS_GEC_VERSION, TRUSTED_CLIENT_TOKEN } from "./token.js";
 import { defaultTransport, type Transport } from "./transport.js";
 import { EDGE_VOICES } from "./voices.js";
@@ -13,6 +14,23 @@ export interface EdgeEngineOptions {
   transport?: Transport;
   /** Clock in milliseconds (Date.now-style). */
   now?: () => number;
+  /** Relay endpoint (`free-tts/server`) for browsers that cannot synthesize directly. */
+  relayUrl?: string;
+  /** Default: `"auto"` when `relayUrl` is set, `"direct"` otherwise. Node is always direct. */
+  mode?: "auto" | "direct" | "relay";
+}
+
+/** Node (not a DOM-bearing runtime such as jsdom or an Electron renderer). */
+function isNodeRuntime(): boolean {
+  if (typeof window !== "undefined" && typeof document !== "undefined") return false;
+  return typeof process !== "undefined" && typeof process.versions?.node === "string";
+}
+
+/** The endpoint accepts only Microsoft Edge >= 137 handshakes. */
+function isEdgeBrowser(): boolean {
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  const match = /\bEdg\/(\d+)/.exec(ua ?? "");
+  return match !== null && Number(match[1]) >= 137;
 }
 
 const WSS_URL =
@@ -38,7 +56,12 @@ function concat(chunks: Uint8Array[], total: number): ArrayBuffer {
 }
 
 export function createEdgeEngine(options: EdgeEngineOptions = {}): Engine {
-  const { firstByteMs = 8000, stallMs = 8000, transport = defaultTransport, now = Date.now } = options;
+  const { firstByteMs = 8000, stallMs = 8000, transport = defaultTransport, now = Date.now, relayUrl } = options;
+  const mode = isNodeRuntime() ? "direct" : (options.mode ?? (relayUrl ? "auto" : "direct"));
+  if (mode !== "direct" && !relayUrl) throw new RangeError(`edge mode "${mode}" needs a relayUrl`);
+  let useRelay = mode === "relay" || (mode === "auto" && !isEdgeBrowser());
+  const relay = (text: string, voice: string, signal: AbortSignal) =>
+    relaySynthesize({ url: relayUrl!, firstByteMs, stallMs }, text, voice, signal);
   // Server clock minus local clock, learned from a rejected handshake's Date header.
   let skewSeconds = 0;
 
@@ -167,7 +190,7 @@ export function createEdgeEngine(options: EdgeEngineOptions = {}): Engine {
     });
   }
 
-  async function synthesize(text: string, voice: string, signal: AbortSignal): Promise<ArrayBuffer> {
+  async function direct(text: string, voice: string, signal: AbortSignal): Promise<ArrayBuffer> {
     try {
       return await attempt(text, voice, signal);
     } catch (failure) {
@@ -185,5 +208,18 @@ export function createEdgeEngine(options: EdgeEngineOptions = {}): Engine {
     }
   }
 
+  async function synthesize(text: string, voice: string, signal: AbortSignal): Promise<ArrayBuffer> {
+    if (useRelay) return relay(text, voice, signal);
+    try {
+      return await direct(text, voice, signal);
+    } catch (error) {
+      if (mode !== "auto" || !(error instanceof TtsError) || error.kind !== "rejected") throw error;
+      // The service refuses this browser: stay on the relay for the rest of the instance's life.
+      useRelay = true;
+      return relay(text, voice, signal);
+    }
+  }
+
+  // Same id and voices in every mode, so cache keys and settings do not change.
   return { id: "edge", voices: EDGE_VOICES, synthesize };
 }
