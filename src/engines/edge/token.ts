@@ -2,11 +2,8 @@
  * Sec-MS-GEC v2 — the DRM token Microsoft Edge's read-aloud TTS endpoint
  * requires on every request since ~2026-10-10.
  *
- * Self-contained on purpose: no imports, no panel code, no platform APIs. It is
- * meant to move verbatim into a standalone library, and a copy of the same
- * logic is inlined into the `edge-tts-universal` pnpm patch (see
- * `patches/edge-tts-universal@1.4.0.patch`); the golden-vector test covers
- * both.
+ * Self-contained: no imports, no platform APIs; golden vectors from Python
+ * edge-tts 7.3.1 pin the output.
  *
  * A faithful port of rany2/edge-tts 7.3.1 `edge_tts/drm.py`
  * (`generate_sec_ms_gec_v2`). The token is `<CS64 16 hex>-<SHA256 64 hex>`,
