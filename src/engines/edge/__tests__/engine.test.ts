@@ -306,4 +306,30 @@ describe("createEdgeEngine", () => {
     expect(opened).toHaveLength(2);
     expect(opened.every((o) => !o.socket.open)).toBe(true);
   });
+
+  it("node runtime is always direct", async () => {
+    const fetchSpy = vi.fn(async () => new Response(new Uint8Array([1])));
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      const { transport, opened } = fakeTransport();
+      const engine = createEdgeEngine({
+        transport,
+        relayUrl: "https://app.test/api/tts",
+        mode: "relay",
+        now: () => NOW,
+      });
+      const promise = engine.synthesize("x", VOICE, new AbortController().signal);
+      expect(opened).toHaveLength(1);
+      const { socket, url } = opened[0]!;
+      expect(url).toMatch(/^wss:\/\//);
+      socket.serverOpen();
+      socket.serverSend(audioFrame([5, 6]));
+      socket.serverSend(TURN_END);
+      const { value } = await settle(promise);
+      expect(Array.from(new Uint8Array(value!))).toEqual([5, 6]);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
