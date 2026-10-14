@@ -357,9 +357,9 @@ export function toNodeHandler(h: (req: Request) => Promise<Response>): (req: Inc
 - "engine failure becomes 502 with its kind"
 - "node adapter mirrors the fetch response"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/server` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/server && git commit -m "feat(server): relay handler with node adapter"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/server` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/server && git commit -m "feat(server): relay handler with node adapter"`
 
 ### Task 13: Browser engine chooses direct or relay
 
