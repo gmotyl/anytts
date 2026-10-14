@@ -3,6 +3,7 @@ import type { Engine } from "./engine.js";
 import { createEdgeEngine, type EdgeEngineOptions } from "./engines/edge/engine.js";
 import { isTransient, TtsError } from "./errors.js";
 import { createScheduler, type ScheduledJob, type SchedulerConfig } from "./scheduler.js";
+import { registerVoiceSource } from "./voices.js";
 
 export interface SynthesisRequest {
   text: string;
@@ -190,7 +191,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     });
   };
 
-  return {
+  const tts: Tts = {
     synthesize,
     prefetch(req) {
       synthesize(req).catch(() => {});
@@ -206,4 +207,9 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
       return cache.subscribe(listener);
     },
   };
+  registerVoiceSource(
+    tts,
+    new Map([...engines].map(([id, { engine, config: c }]) => [id, { voices: c.voices, catalog: engine.voices }])),
+  );
+  return tts;
 }
