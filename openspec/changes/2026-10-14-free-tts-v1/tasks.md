@@ -472,9 +472,9 @@ export function firstSentence(text: string): string | null;
 - "browser bundle needs no node built-ins and excludes the server"
 - "text entry bundles without engine code"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run test/package` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "test: package entries for node and browser"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run test/package` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "test: package entries for node and browser"`
 
 ### Task 17: Live contract test and nightly workflow
 

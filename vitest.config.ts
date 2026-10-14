@@ -21,6 +21,16 @@ export default defineConfig({
       },
       {
         test: {
+          name: "package",
+          environment: "node",
+          include: ["test/package/*.test.ts"],
+          globalSetup: ["test/package/setup.ts"],
+          testTimeout: 120_000,
+          hookTimeout: 180_000,
+        },
+      },
+      {
+        test: {
           name: "live",
           environment: "node",
           include: ["test/live/*.live.test.ts"],
