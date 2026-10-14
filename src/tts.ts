@@ -14,6 +14,7 @@ export interface SynthesisRequest {
 }
 
 export interface SynthesisResult {
+  /** Shared with the cache and every caller served the same entry: do not detach or transfer it. */
   bytes: ArrayBuffer;
   mime: "audio/mpeg";
   engine: string;
@@ -148,8 +149,13 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
 
     const tier = req.tier ?? defaultTier ?? "";
     let flight = inFlight.get(r.key);
-    if (flight) flight.job.promote(tier);
-    else flight = start(r, req.text, tier);
+    try {
+      // The scheduler throws RangeError for an unknown tier; surface it as a rejection.
+      if (flight) flight.job.promote(tier);
+      else flight = start(r, req.text, tier);
+    } catch (error) {
+      return Promise.reject(error);
+    }
     flight.callers++;
     const joined = flight;
 

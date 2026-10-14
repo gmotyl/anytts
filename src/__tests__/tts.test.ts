@@ -223,6 +223,84 @@ describe("createTts", () => {
     expect(new Uint8Array((await staying).bytes)).toEqual(new Uint8Array([7]));
   });
 
+  it("both callers aborting cancels the job", async () => {
+    const { tts, edge } = setup();
+    const blocker = tts.synthesize({ text: "busy" });
+    const first = new AbortController();
+    const second = new AbortController();
+    const a = tts.synthesize({ text: "a", signal: first.signal });
+    const b = tts.synthesize({ text: "a", signal: second.signal });
+    await flush();
+    expect(edge.calls.map((c) => c.text)).toEqual(["busy"]);
+    first.abort();
+    second.abort();
+    await expect(a).rejects.toMatchObject({ name: "AbortError" });
+    await expect(b).rejects.toMatchObject({ name: "AbortError" });
+    edge.calls[0]!.resolve(bytes(1));
+    await blocker;
+    await flush();
+    // The queued job was dropped: the freed slot never runs it.
+    expect(edge.calls.map((c) => c.text)).toEqual(["busy"]);
+    expect(tts.isCached({ text: "a" })).toBe(false);
+  });
+
+  it("the last of two callers aborting after start aborts the engine signal", async () => {
+    const { tts, edge } = setup();
+    const first = new AbortController();
+    const second = new AbortController();
+    const a = tts.synthesize({ text: "a", signal: first.signal });
+    const b = tts.synthesize({ text: "a", signal: second.signal });
+    await flush();
+    expect(edge.calls).toHaveLength(1);
+    first.abort();
+    await expect(a).rejects.toMatchObject({ name: "AbortError" });
+    expect(edge.calls[0]!.signal.aborted).toBe(false);
+    second.abort();
+    await expect(b).rejects.toMatchObject({ name: "AbortError" });
+    expect(edge.calls[0]!.signal.aborted).toBe(true);
+    await flush();
+    expect(tts.isCached({ text: "a" })).toBe(false);
+  });
+
+  it("unknown tier rejects instead of throwing", async () => {
+    const { tts, edge } = setup();
+    let fresh: Promise<unknown> | undefined;
+    expect(() => {
+      fresh = tts.synthesize({ text: "a", tier: "bogus" });
+    }).not.toThrow();
+    await expect(fresh).rejects.toThrow(RangeError);
+    // Joining an in-flight job with an unknown tier rejects too, and leaves the job alone.
+    const owner = tts.synthesize({ text: "b" });
+    let joined: Promise<unknown> | undefined;
+    expect(() => {
+      joined = tts.synthesize({ text: "b", tier: "bogus" });
+    }).not.toThrow();
+    await expect(joined).rejects.toThrow(RangeError);
+    await flush();
+    expect(edge.calls.map((c) => c.text)).toEqual(["b"]);
+    edge.calls[0]!.resolve(bytes(3));
+    expect(new Uint8Array((await owner).bytes)).toEqual(new Uint8Array([3]));
+  });
+
+  it("prefetch with an unknown tier does not throw", async () => {
+    const { tts, edge } = setup();
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      expect(() => tts.prefetch({ text: "a", tier: "bogus" })).not.toThrow();
+      const owner = tts.synthesize({ text: "b" });
+      expect(() => tts.prefetch({ text: "b", tier: "bogus" })).not.toThrow();
+      await flush();
+      edge.calls[0]!.resolve(bytes(1));
+      await owner;
+      await flush();
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   it("prefetch swallows failures", async () => {
     const { tts, edge } = setup({ retries: 0 });
     const unhandled: unknown[] = [];
