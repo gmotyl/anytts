@@ -85,10 +85,34 @@ describe("defaultTransport (node)", () => {
     );
     const seen = new Promise<{ status: number; date: string | null }>((resolve) => {
       const socket = defaultTransport.open(url, {}, {
-        onUnexpectedResponse: (status, headers) => resolve({ status, date: headers.get("date") }),
+        onUnexpectedResponse: (status, headers) => {
+          resolve({ status, date: headers.get("date") });
+          socket.close();
+        },
       });
       socket.addEventListener("error", () => {});
     });
     expect(await seen).toEqual({ status: 403, date });
+  });
+
+  it("node transport reports a refused connection as a connect error", async () => {
+    // Bind then close a server, so the port is known to refuse connections.
+    const port = await new Promise<number>((resolvePort) => {
+      const server = createServer();
+      server.listen(0, "127.0.0.1", () => {
+        const { port: p } = server.address() as AddressInfo;
+        server.close(() => resolvePort(p));
+      });
+    });
+    const onUnexpectedResponse = vi.fn();
+    const cause = await new Promise<unknown>((resolve) => {
+      const socket = defaultTransport.open(`ws://127.0.0.1:${port}/edge/v1`, {}, {
+        onUnexpectedResponse,
+        onConnectError: resolve,
+      });
+      socket.addEventListener("error", () => {});
+    });
+    expect(cause).toBeDefined();
+    expect(onUnexpectedResponse).not.toHaveBeenCalled();
   });
 });

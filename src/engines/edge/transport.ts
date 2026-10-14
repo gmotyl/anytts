@@ -7,6 +7,11 @@ export interface TransportHooks {
    * `error` event. Browsers never expose this, so browser transports never call it.
    */
   onUnexpectedResponse?(status: number, headers: Headers): void;
+  /**
+   * The connection failed before any HTTP response (DNS, refused, TLS reset).
+   * Called before the socket's `error` event. Browser transports never call it.
+   */
+  onConnectError?(cause: unknown): void;
 }
 
 /** Opens the read-aloud WebSocket. Injectable so engines can be driven by a fake socket. */
@@ -68,16 +73,29 @@ const GLOBAL_DISPATCHER = Symbol.for("undici.globalDispatcher.1");
  * that delegates to the global one. Covers both the undici 6 (`onHeaders`) and
  * undici 7 (`onResponseStart`) handler shapes.
  */
-function observingDispatcher(
-  onUnexpectedResponse: (status: number, headers: Headers) => void,
-): Dispatcher | undefined {
+function observingDispatcher(hooks: TransportHooks): Dispatcher | undefined {
   const base = (globalThis as Record<symbol, unknown>)[GLOBAL_DISPATCHER] as Dispatcher | undefined;
   if (typeof base?.dispatch !== "function") return undefined;
-  const report = (status: unknown, headers: Headers) => {
-    if (typeof status === "number" && status !== 101) onUnexpectedResponse(status, headers);
-  };
   return {
     dispatch(options, handler) {
+      let responded = false;
+      // A throwing hook must never throw inside undici.
+      const report = (status: unknown, headers: Headers) => {
+        responded = true;
+        try {
+          if (typeof status === "number" && status !== 101) hooks.onUnexpectedResponse?.(status, headers);
+        } catch {
+          // Ignored: observers cannot affect the connection.
+        }
+      };
+      const reportError = (cause: unknown) => {
+        if (responded) return;
+        try {
+          hooks.onConnectError?.(cause);
+        } catch {
+          // Ignored: observers cannot affect the connection.
+        }
+      };
       const observed = new Proxy(handler, {
         get(target, prop) {
           const value: unknown = Reflect.get(target, prop);
@@ -102,6 +120,18 @@ function observingDispatcher(
               return value.call(target, controller, status, raw, ...rest);
             };
           }
+          if (prop === "onError") {
+            return (cause: unknown, ...rest: unknown[]) => {
+              reportError(cause);
+              return value.call(target, cause, ...rest);
+            };
+          }
+          if (prop === "onResponseError") {
+            return (controller: unknown, cause: unknown, ...rest: unknown[]) => {
+              reportError(cause);
+              return value.call(target, controller, cause, ...rest);
+            };
+          }
           return value.bind(target);
         },
       });
@@ -115,9 +145,8 @@ export const defaultTransport: Transport = {
   open(url, headers, hooks) {
     if (!canSetHeaders()) return new WebSocket(url);
     const Ctor = WebSocket as unknown as NodeWebSocketCtor;
-    const dispatcher = hooks?.onUnexpectedResponse
-      ? observingDispatcher(hooks.onUnexpectedResponse.bind(hooks))
-      : undefined;
+    const dispatcher =
+      hooks?.onUnexpectedResponse || hooks?.onConnectError ? observingDispatcher(hooks) : undefined;
     return new Ctor(url, {
       headers: mergeHeaders(EDGE_WS_HEADERS, headers),
       ...(dispatcher ? { dispatcher } : {}),

@@ -217,6 +217,42 @@ describe("createEdgeEngine", () => {
     expect(socket.open).toBe(false);
   });
 
+  it("connect error without a response is network", async () => {
+    const { transport, opened } = fakeTransport(({ socket, hooks }) => {
+      // Mimics undici on ECONNREFUSED/DNS failure: no response, then an error event.
+      queueMicrotask(() => {
+        hooks?.onConnectError?.(new Error("connect ECONNREFUSED"));
+        socket.serverError();
+      });
+    });
+    const { error } = await settle(engineWith(transport).synthesize("x", VOICE, new AbortController().signal));
+    const err = expectKind(error, "network");
+    expect(err.cause).toBeInstanceOf(Error);
+    expect(opened).toHaveLength(1);
+    expect(opened[0]!.socket.listenerCount).toBe(0);
+  });
+
+  it("error before open without a signal stays rejected", async () => {
+    const { transport } = fakeTransport(({ socket }) => {
+      queueMicrotask(() => socket.serverError());
+    });
+    const { error } = await settle(engineWith(transport).synthesize("x", VOICE, new AbortController().signal));
+    expectKind(error, "rejected");
+  });
+
+  it("a transport that throws on open rejects network", async () => {
+    const cause = new Error("bad url");
+    const transport: Transport = {
+      open() {
+        throw cause;
+      },
+    };
+    const { error } = await settle(engineWith(transport).synthesize("x", VOICE, new AbortController().signal));
+    const err = expectKind(error, "network");
+    expect(err.cause).toBe(cause);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("abort closes the socket", async () => {
     const { transport, opened } = fakeTransport();
     const controller = new AbortController();

@@ -55,18 +55,28 @@ export function createEdgeEngine(options: EdgeEngineOptions = {}): Engine {
       let settled = false;
       let status: number | undefined;
       let serverDateMs: number | undefined;
+      // Set only on a positive transport signal that no HTTP response ever arrived.
+      let connectError: { cause: unknown } | undefined;
       let timer: ReturnType<typeof setTimeout> | undefined;
       const chunks: Uint8Array[] = [];
       let total = 0;
 
-      const socket = transport.open(url, {}, {
-        onUnexpectedResponse(code, headers) {
-          status = code;
-          const date = Date.parse(headers.get("date") ?? "");
-          if (!Number.isNaN(date)) serverDateMs = date;
-        },
-      });
-      socket.binaryType = "arraybuffer";
+      let socket: WebSocket;
+      try {
+        socket = transport.open(url, {}, {
+          onUnexpectedResponse(code, headers) {
+            status = code;
+            const date = Date.parse(headers.get("date") ?? "");
+            if (!Number.isNaN(date)) serverDateMs = date;
+          },
+          onConnectError(cause) {
+            connectError = { cause };
+          },
+        });
+        socket.binaryType = "arraybuffer";
+      } catch (cause) {
+        return reject({ error: new TtsError("network", "transport failed to open", { cause }) });
+      }
 
       const cleanup = () => {
         settled = true;
@@ -97,6 +107,9 @@ export function createEdgeEngine(options: EdgeEngineOptions = {}): Engine {
       // Before any audio, a refused handshake or a server-side close means "rejected".
       const failEarly = () => {
         if (opened && total === 0) return fail(new TtsError("rejected", "server closed before any audio"));
+        if (!opened && connectError && status === undefined) {
+          return fail(new TtsError("network", "connect failed", { cause: connectError.cause }));
+        }
         if (!opened) {
           return fail(
             new TtsError("rejected", status ? `handshake refused (${status})` : "handshake refused", {
