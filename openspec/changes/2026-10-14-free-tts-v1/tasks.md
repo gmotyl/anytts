@@ -422,9 +422,9 @@ export function applyPronunciation(text: string, lang: string | undefined, maps?
 - "ordinary prose survives the pl preset"
 - (ported motyl tests, names kept)
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/text/__tests__/pronunciation.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/text && git commit -m "feat(text): per-language pronunciation maps with pl preset"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/text/__tests__/pronunciation.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/text && git commit -m "feat(text): per-language pronunciation maps with pl preset"`
 
 ### Task 15: Unit packing and first sentence
 
