@@ -134,4 +134,43 @@ describe("toNodeHandler", () => {
 
     await expect.poll(() => cancelled, { timeout: 2000 }).toBe(true);
   });
+
+  it("node adapter does not hang when the client left during a read", async () => {
+    let pulls = 0;
+    let cancelled = false;
+    const base = await listen(
+      async (req) =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            async pull(controller) {
+              pulls++;
+              if (pulls === 1) return controller.enqueue(new Uint8Array(16));
+              if (pulls === 2) {
+                // Resolve this read only after the client is gone and 'close' has fired.
+                await new Promise<void>((resolve) => {
+                  if (req.signal.aborted) return resolve();
+                  req.signal.addEventListener("abort", () => setTimeout(resolve, 20), { once: true });
+                });
+                return controller.enqueue(new Uint8Array(64 * 1024));
+              }
+              await new Promise<never>(() => {});
+            },
+            cancel() {
+              cancelled = true;
+            },
+          }),
+        ),
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      const req = request(base, { method: "POST" }, () => {
+        req.destroy();
+        resolve();
+      });
+      req.on("error", reject);
+      req.end();
+    });
+
+    await expect.poll(() => cancelled, { timeout: 2000 }).toBe(true);
+  });
 });

@@ -116,5 +116,15 @@ describe("createRelayHandler", () => {
 
     // A body within the cap still works.
     expect((await handler(post({ text: "1234567890", voice: VOICE }))).status).toBe(200);
+
+    // Valid JSON escaping every character (6 bytes each) at maxChars still fits.
+    const escaped = createRelayHandlerWith(engine, { maxChars: 2000 });
+    const body = `{"text":"${"\\u0105".repeat(2000)}","voice":${JSON.stringify(VOICE)}}`;
+    const wide = new Request("http://relay.test/api/tts", {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-length": String(body.length) },
+      body,
+    });
+    expect((await escaped(wide)).status).toBe(200);
   });
 });

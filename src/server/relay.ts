@@ -46,8 +46,8 @@ export function createRelayHandlerWith(
 ): (req: Request) => Promise<Response> {
   const { maxChars = 2000, authorize } = options;
   const voiceIds = new Set(engine.voices.map((v) => v.id));
-  // Worst case 4 UTF-8 bytes per code unit (escapes aside) plus JSON overhead.
-  const maxBodyBytes = maxChars * 4 + 1024;
+  // Worst case 6 bytes per code unit (a `\uXXXX` JSON escape) plus JSON overhead.
+  const maxBodyBytes = maxChars * 6 + 1024;
   const tooLarge = () => json(413, { error: `body larger than ${maxBodyBytes} bytes` });
 
   return async (req) => {

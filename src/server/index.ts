@@ -75,8 +75,10 @@ async function writeResponse(response: Response, res: ServerResponse): Promise<v
     if (res.destroyed) return void (await reader.cancel());
     const { done, value } = await reader.read();
     if (done) break;
-    // Respect backpressure, but a client that leaves never drains.
+    // Respect backpressure, but a client that leaves never drains. The client may have
+    // left during the read: 'close' has then already fired and would never be awaited.
     if (!res.write(value)) {
+      if (res.destroyed) return void (await reader.cancel());
       const closed = await new Promise<boolean>((resolve) => {
         const onDrain = () => {
           res.off("close", onClose);
@@ -88,6 +90,7 @@ async function writeResponse(response: Response, res: ServerResponse): Promise<v
         };
         res.once("drain", onDrain);
         res.once("close", onClose);
+        if (res.destroyed) onClose();
       });
       if (closed) return void (await reader.cancel());
     }
