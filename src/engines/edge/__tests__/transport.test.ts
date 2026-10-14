@@ -1,6 +1,6 @@
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import type { AddressInfo } from "node:net";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { defaultTransport } from "../transport.js";
 
 const EDGE_ORIGIN = "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold";
@@ -36,7 +36,35 @@ function captureUpgradeHeaders(): Promise<{ url: string; headers: Promise<Incomi
   });
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("defaultTransport (node)", () => {
+  it("node transport lets a lowercase header override the default", async () => {
+    const { url, headers } = await captureUpgradeHeaders();
+    const socket = defaultTransport.open(url, { "user-agent": "Custom/1.0", origin: "https://x.test" });
+    socket.addEventListener("error", () => {});
+
+    const seen = await headers;
+    expect(seen["user-agent"]).toBe("Custom/1.0");
+    expect(seen.origin).toBe("https://x.test");
+  });
+
+  it("a runtime that is not node and has no DOM passes no headers argument", () => {
+    // A Web Worker: no window/document and no node process.
+    const ctor = vi.fn(function FakeWebSocket() {});
+    vi.stubGlobal("WebSocket", ctor);
+    vi.stubGlobal("process", undefined);
+    const url = "wss://example.test/edge/v1?x=1";
+    try {
+      defaultTransport.open(url, { Origin: "ignored" });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(ctor.mock.calls[0]).toEqual([url]);
+  });
+
   it("node transport sends Origin and User-Agent", async () => {
     const { url, headers } = await captureUpgradeHeaders();
     const socket = defaultTransport.open(url, { "X-Extra": "1" });

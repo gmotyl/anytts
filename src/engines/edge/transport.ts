@@ -29,8 +29,25 @@ export const EDGE_WS_HEADERS: Readonly<Record<string, string>> = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-function isBrowser(): boolean {
-  return typeof window !== "undefined" && typeof document !== "undefined";
+/**
+ * Headers can be set only on Node's (undici) WebSocket. Detect Node positively, so
+ * Web Workers and other non-Node runtimes take the URL-only path. A DOM wins over
+ * `process` (jsdom, Electron renderers), since browser WebSockets reject an init object.
+ */
+function canSetHeaders(): boolean {
+  if (typeof window !== "undefined" && typeof document !== "undefined") return false;
+  return typeof process !== "undefined" && typeof process.versions?.node === "string";
+}
+
+/** Defaults overlaid by `overrides`, matching names case-insensitively (overrides win). */
+function mergeHeaders(
+  defaults: Readonly<Record<string, string>>,
+  overrides: Record<string, string>,
+): Record<string, string> {
+  const overridden = new Set(Object.keys(overrides).map((k) => k.toLowerCase()));
+  const merged: Record<string, string> = {};
+  for (const [k, v] of Object.entries(defaults)) if (!overridden.has(k.toLowerCase())) merged[k] = v;
+  return { ...merged, ...overrides };
 }
 
 // Node's (undici) WebSocket takes a non-standard `{ headers, dispatcher }` init as its second argument.
@@ -93,16 +110,16 @@ function observingDispatcher(
   };
 }
 
-/** Browser: `new WebSocket(url)` (headers cannot be set). Node: global WebSocket with Edge headers. */
+/** Node: global WebSocket with Edge headers. Elsewhere: `new WebSocket(url)` (headers cannot be set). */
 export const defaultTransport: Transport = {
   open(url, headers, hooks) {
-    if (isBrowser()) return new WebSocket(url);
+    if (!canSetHeaders()) return new WebSocket(url);
     const Ctor = WebSocket as unknown as NodeWebSocketCtor;
     const dispatcher = hooks?.onUnexpectedResponse
       ? observingDispatcher(hooks.onUnexpectedResponse.bind(hooks))
       : undefined;
     return new Ctor(url, {
-      headers: { ...EDGE_WS_HEADERS, ...headers },
+      headers: mergeHeaders(EDGE_WS_HEADERS, headers),
       ...(dispatcher ? { dispatcher } : {}),
     });
   },
