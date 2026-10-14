@@ -4,13 +4,13 @@
 
 **Goal:** Ship `free-tts@0.1.0` — Edge engine with its own client, cache, tiered scheduler, voice API and `free-tts/text` — usable from the browser and Node.
 
-**Architecture:** Core entry `free-tts` (`createTts` → cache → scheduler → engine → transport) and an independent `free-tts/text` entry. Pure TypeScript, ESM-only, zero runtime dependencies; every network edge sits behind an injectable transport so the suite runs on fakes.
+**Architecture:** Core entry `free-tts` (`createTts` → cache → scheduler → engine → transport or Relay), an independent `free-tts/text` entry and a `free-tts/server` Relay handler for non-Edge browsers. Pure TypeScript, ESM-only, zero runtime dependencies; every network edge sits behind an injectable transport so the suite runs on fakes.
 
 **Tech Stack:** TypeScript, pnpm, vitest (`node` + `jsdom` projects), `tsc` build, GitHub Actions, npm.
 
 **Design:** [design.md](./design.md)
 
-**Preconditions (check before Task 1):** the pavilio 403 hotfix PR is merged (its Sec-MS-GEC v2 module is the source for Task 3), and motyl `fix/pronunciation-match-strictness` is merged to motyl `main` (source for Task 12). If either is open, start with tasks that don't depend on it and stop before 3 / 12.
+**Preconditions (check before Task 1):** the pavilio 403 hotfix PR is merged (its Sec-MS-GEC v2 module is the source for Task 3), and motyl `fix/pronunciation-match-strictness` is merged to motyl `main` (source for Task 14). If either is open, start with tasks that don't depend on it and stop before 3 / 14.
 
 ---
 
@@ -25,7 +25,8 @@
 { "name": "free-tts", "version": "0.0.0", "type": "module", "license": "MIT",
   "engines": { "node": ">=22" }, "sideEffects": false, "dependencies": {},
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-               "./text": { "types": "./dist/text/index.d.ts", "import": "./dist/text/index.js" } },
+               "./text": { "types": "./dist/text/index.d.ts", "import": "./dist/text/index.js" },
+               "./server": { "types": "./dist/server/index.d.ts", "import": "./dist/server/index.js" } },
   "scripts": { "build": "tsc -p tsconfig.json", "test": "vitest run", "test:live": "vitest run --project live", "lint": "tsc --noEmit" } }
 ```
 vitest projects: `node` (`src/**/__tests__/*.test.ts`, environment node), `jsdom` (`*.browser.test.ts`), `live` (`test/live/*.live.test.ts`, excluded from the other two).
@@ -115,7 +116,7 @@ export interface Transport { open(url: string, headers: Record<string, string>):
 ```
 
 **Acceptance criteria:**
-- WHEN `defaultTransport` opens in Node against a local upgrade server THEN the server sees the Edge-extension `Origin` and a Chromium Edge `User-Agent`
+- WHEN `defaultTransport` opens in Node against a local upgrade server THEN the server sees the Edge-extension `Origin` and a Microsoft Edge ≥ 137 `User-Agent`
 - WHEN `defaultTransport` opens in a browser environment THEN `WebSocket` is constructed with the URL only
 
 **Tests (names only — red first):**
@@ -325,7 +326,74 @@ export function resolveVoice(tts: Tts, q: { engine: string; voice?: string; lang
 - [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
 - [ ] **Step 3: Commit** — `git commit -am "feat: resolveVoice for settings UIs"`
 
-### Task 12: Pronunciation maps per spoken language
+### Task 12: Relay handler (`free-tts/server`)
+
+**Files:**
+- Create: `src/server/index.ts` (`createRelayHandler`, `toNodeHandler`)
+- Test: `src/server/__tests__/relay.test.ts` (fake Edge engine), `src/server/__tests__/node-adapter.test.ts` (real `node:http` server)
+
+**Contract:**
+```ts
+export function createRelayHandler(opts?: { maxChars?: number; authorize?: (req: Request) => boolean | Promise<boolean>; edge?: EdgeEngineOptions }):
+  (req: Request) => Promise<Response>;
+// request: POST application/json { text: string; voice: string }
+// 200 audio/mpeg | 400/413/403/502 application/json { kind?: TtsErrorKind }
+export function toNodeHandler(h: (req: Request) => Promise<Response>): (req: IncomingMessage, res: ServerResponse) => void;
+```
+
+**Acceptance criteria:**
+- WHEN a valid POST arrives THEN `200 audio/mpeg` with the engine's bytes
+- WHEN `voice` is not in the Edge catalog THEN `400 {kind:"unknown-voice"}` and the engine is not called
+- WHEN `text.length > maxChars` THEN `413` and the engine is not called
+- WHEN `authorize` resolves `false` THEN `403` and the engine is not called
+- WHEN the engine rejects `TtsError{kind}` THEN `502 {kind}`
+- WHEN mounted through `toNodeHandler` on `node:http` THEN status, headers and body match the Fetch response
+
+**Tests (names only — red first):**
+- "relays audio for a valid request"
+- "rejects an unknown voice without calling the engine"
+- "rejects text over maxChars"
+- "authorize false refuses"
+- "engine failure becomes 502 with its kind"
+- "node adapter mirrors the fetch response"
+
+- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/server` — Expected: FAIL
+- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [ ] **Step 3: Commit** — `git add src/server && git commit -m "feat(server): relay handler with node adapter"`
+
+### Task 13: Browser engine chooses direct or relay
+
+**Files:**
+- Modify: `src/engines/edge/engine.ts` (`createEdgeEngine`: `relayUrl`, `mode`)
+- Create: `src/engines/edge/relayClient.ts` (POST + HTTP deadlines + error rehydration)
+- Test: `src/engines/edge/__tests__/relay-mode.browser.test.ts` (jsdom, stubbed `fetch`, `WebSocket`, `navigator.userAgent`)
+
+**Contract:**
+```ts
+export interface EdgeEngineOptions { /* …Task 6 fields… */ relayUrl?: string; mode?: "auto" | "direct" | "relay"; }
+// default mode: relayUrl ? "auto" : "direct"; Node is always direct
+```
+
+**Acceptance criteria:**
+- WHEN `mode: "auto"` and the user agent is Edge ≥ 137 THEN a WebSocket is opened and `fetch` is not called
+- WHEN `mode: "auto"` and the user agent is Chrome 143 THEN `relayUrl` receives `POST {text, voice}` and no WebSocket is opened
+- WHEN a direct attempt in `auto` ends `rejected` THEN that synthesis and every later one of the instance use the relay
+- WHEN the relay answers `502 {kind:"stalled"}` THEN the attempt ends `TtsError{kind:"stalled"}`; WHEN headers do not arrive within `firstByteMs` THEN `first-byte-timeout`; WHEN body chunks stop for `stallMs` THEN `stalled`; WHEN `fetch` throws THEN `network`
+- WHEN the same request runs direct and via relay THEN both report `engine: "edge"` and share one cache key
+
+**Tests (names only — red first):**
+- "auto in Edge goes direct"
+- "auto in Chrome goes through the relay"
+- "auto switches to relay after a direct rejection"
+- "relay error kinds are rehydrated"
+- "relay deadlines map to first-byte-timeout and stalled"
+- "direct and relay share engine id and cache key"
+
+- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/relay-mode.browser.test.ts` — Expected: FAIL
+- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [ ] **Step 3: Commit** — `git commit -am "feat(edge): auto direct/relay mode for browsers"`
+
+### Task 14: Pronunciation maps per spoken language
 
 **Files:**
 - Create: `src/text/pronunciation.ts` (`applyPronunciation`, map/entry types), `src/text/presets/pl.ts` (from motyl `main` `lib/tts/pronunciation.ts` after the strictness merge)
@@ -358,7 +426,7 @@ export function applyPronunciation(text: string, lang: string | undefined, maps?
 - [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
 - [ ] **Step 3: Commit** — `git add src/text && git commit -m "feat(text): per-language pronunciation maps with pl preset"`
 
-### Task 13: Unit packing and first sentence
+### Task 15: Unit packing and first sentence
 
 **Files:**
 - Create: `src/text/units.ts` (`packUnits`, `firstSentence`)
@@ -388,33 +456,33 @@ export function firstSentence(text: string): string | null;
 - [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
 - [ ] **Step 3: Commit** — `git commit -am "feat(text): packUnits and firstSentence"`
 
-### Task 14: Package entries are clean for Node and the browser
+### Task 16: Package entries are clean for Node and the browser
 
 **Files:**
 - Create: `test/package/consume.test.ts` (packs the tarball and imports it in a temp Node project), `test/package/vite-bundle.test.ts` (bundles `free-tts` and `free-tts/text` with Vite)
 - Modify: `package.json` (`files`, devDependency `vite`)
 
 **Acceptance criteria:**
-- WHEN the packed tarball is installed in a temp Node 22 project THEN both entries import with types and `node_modules` holds no runtime dependency of free-tts
-- WHEN Vite bundles an import of `free-tts` THEN the build succeeds without Node built-in polyfills
+- WHEN the packed tarball is installed in a temp Node 22 project THEN all three entries import with types and `node_modules` holds no runtime dependency of free-tts
+- WHEN Vite bundles an import of `free-tts` THEN the build succeeds without Node built-in polyfills and contains no `free-tts/server` code
 - WHEN Vite bundles only `free-tts/text` THEN the output contains no token, transport or engine code
 
 **Tests (names only — red first):**
 - "packed package imports in node 22"
-- "browser bundle needs no node built-ins"
+- "browser bundle needs no node built-ins and excludes the server"
 - "text entry bundles without engine code"
 
 - [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run test/package` — Expected: FAIL
 - [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
 - [ ] **Step 3: Commit** — `git commit -am "test: package entries for node and browser"`
 
-### Task 15: Live contract test and nightly workflow
+### Task 17: Live contract test and nightly workflow
 
 **Files:**
 - Create: `test/live/edge.live.test.ts`, `.github/workflows/nightly-live.yml`
 
 **Acceptance criteria:**
-- WHEN `pnpm test:live` runs with network access THEN one short Polish synthesis via `pl-PL-MarekNeural` returns > 1 KB of MP3 and the live voice list contains every voice in the Edge catalog
+- WHEN `pnpm test:live` runs with network access THEN one short Polish synthesis via `pl-PL-MarekNeural` returns > 1 KB of MP3 directly, the same request through a locally started Relay handler (`toNodeHandler` on `node:http`) returns > 1 KB of MP3, and the live voice list contains every voice in the Edge catalog
 - WHEN `pnpm test` runs THEN the live test is not executed
 - WHEN the nightly workflow runs THEN it executes `pnpm test:live` on a schedule and on manual dispatch
 
@@ -423,7 +491,7 @@ export function firstSentence(text: string): string | null;
 - [ ] **Step 1: Write the live test + workflow, run both commands**
 - [ ] **Step 2: Commit** — `git commit -am "test: live Edge contract test and nightly workflow"`
 
-### Task 16: CI and release workflows
+### Task 18: CI and release workflows
 
 **Files:**
 - Create: `.github/workflows/ci.yml` (lint, build, `pnpm test` on PRs and `main`), `.github/workflows/release.yml` (on tag `v*`: test, build, `npm publish --provenance`)
@@ -434,7 +502,7 @@ export function firstSentence(text: string): string | null;
 - [ ] **Step 1: Write workflows + README, verify**
 - [ ] **Step 2: Commit** — `git commit -am "ci: test on PRs, publish on tags"`
 
-### Task 17: Publish 0.1.0 (user-gated)
+### Task 19: Publish 0.1.0 (user-gated)
 
 **Acceptance criteria:**
 - WHEN the user confirms THEN public repo `gmotyl/free-tts` exists, `main` is pushed, the `NPM_TOKEN` secret is set by the user, and tag `v0.1.0` publishes `free-tts@0.1.0`

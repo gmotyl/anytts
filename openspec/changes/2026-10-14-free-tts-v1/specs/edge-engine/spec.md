@@ -18,7 +18,7 @@ The engine opens its socket through an injectable transport; the default transpo
 
 #### Scenario: Node sends identifying headers
 - **WHEN** the engine connects from Node with the default transport
-- **THEN** the upgrade request carries the Edge extension `Origin` and a Chromium Edge `User-Agent`
+- **THEN** the upgrade request carries the Edge extension `Origin` and a Microsoft Edge ≥ 137 `User-Agent` (the endpoint refuses every other User-Agent with 403)
 
 #### Scenario: Browser connects without custom headers
 - **WHEN** the engine connects in a browser with the default transport

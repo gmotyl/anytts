@@ -20,6 +20,9 @@ Both depend on `edge-tts-universal` (browser build), which now fails them both:
   issue #490). `edge-tts-universal` 1.4.0 (last release February) still sends v1.
 - **On a 403 its stream never settles** — no error, no end. Users see a red button and silence.
 - **No language control.** Multilingual voices auto-detect and sometimes read Polish as English.
+- **Only Edge may connect.** The endpoint also refuses (403) any handshake whose User-Agent is not
+  Microsoft Edge ≥ 137, and a browser cannot set User-Agent on a WebSocket — so even with the new
+  token, Chrome, Firefox and Safari cannot synthesize directly (found 2026-10-14 by both hotfixes).
 
 A short-term `pnpm patch` hotfix in each app restores audio; it does not remove the duplication or
 the dependency.
@@ -39,6 +42,8 @@ Node), zero runtime dependencies:
 - **Voices**: `listEngines`, `listVoices(engine)`, `resolveVoice`; a **Voice map** per engine
   (`{pl, en, default}`) is the only way to force a language — the Edge endpoint ignores or rejects
   every SSML language hint (spike 2026-10-14).
+- **Relay** (`free-tts/server`): a stateless Fetch-standard handler that synthesizes in Node with an
+  Edge User-Agent; the browser engine uses it automatically outside Edge (`mode: "auto"`).
 - **`free-tts/text`**: per-language **Pronunciation maps** (shipped `pl` preset = motyl's strict
   map), `packUnits`, `firstSentence`.
 
@@ -47,7 +52,8 @@ Node), zero runtime dependencies:
 - Adopting the library in pavilio or motyl — separate proposals in each project's store.
 - Markdown stripping and language detection — they diverged per app and stay there.
 - Playback (MSE carriers, audio elements, media session) — app-owned.
-- Piper (offline browser engine) and a server proxy route — separate free-tts proposals.
+- Piper (offline browser engine) — separate free-tts proposal.
+- Mounting the Relay route, rate limiting and abuse protection — each app's adoption proposal.
 
 ## Preconditions
 
@@ -58,5 +64,6 @@ Node), zero runtime dependencies:
 
 - Golden token vectors match Python edge-tts 7.3.1 byte for byte.
 - A fake transport answering 403 makes `synthesize` reject `rejected` within the deadline.
+- In a non-Edge browser environment with `relayUrl`, synthesis goes through the Relay and returns audio.
 - Live contract test (one short synthesis + voice list) green manually and in a nightly workflow.
 - `free-tts@0.1.0` installable from npm in a scratch project, in Node and in a browser bundle.

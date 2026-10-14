@@ -25,7 +25,8 @@ flowchart LR
   prep --> pron --> pack --> tts --> cache --> sched --> edge --> ws
 ```
 
-Two package entries, no shared state between them: `free-tts` (core) and `free-tts/text`.
+Three package entries: `free-tts` (core), `free-tts/text` (no engine code) and `free-tts/server`
+(the Relay handler, Node/edge-runtime only).
 Pure TypeScript, ESM-only, zero runtime dependencies. Node ≥ 22 (global `WebSocket` accepts
 `{ headers }` — verified on 22.22: Origin, User-Agent and custom headers reach the server).
 
@@ -137,11 +138,45 @@ same remedy rany2/edge-tts applies; a second `rejected` is final.
   ported from rany2/edge-tts 7.3.0; first written for the 403 hotfix and moved here unchanged.
   Pure function of (timestamp, constants) → string.
 - **Transport** interface `{ open(url, headers) → socket-like }`. Browser: `new WebSocket(url)`
-  (headers impossible; the endpoint accepts browser sockets today). Node: `new WebSocket(url, { headers })`
-  with the Edge extension Origin and a Chromium Edge User-Agent.
+  (headers impossible). Node: `new WebSocket(url, { headers })` with the Edge extension Origin and a
+  Microsoft Edge ≥ 137 User-Agent (`… Chrome/143.0.0.0 … Edg/143.0.0.0`).
+- **User-Agent gate (found 2026-10-14, after the hotfixes):** the endpoint answers 403 to any
+  handshake whose User-Agent is not Microsoft Edge ≥ 137 — Chrome, Firefox, Safari, older Edge and
+  `node` are refused; Origin is irrelevant. A browser cannot set User-Agent on a WebSocket, so
+  **direct browser synthesis works only inside Edge**. Everything else goes through the **Relay**.
 - **Protocol**: `speech.config` (output `audio-24khz-48kbitrate-mono-mp3`) then `ssml`
   (`speak` > `voice` > `prosody`, text XML-escaped); binary frames carry audio after a header
   block; `Path:turn.end` ends the turn.
+
+## Relay (server-side synthesis for non-Edge browsers)
+
+```mermaid
+sequenceDiagram
+  participant B as Browser (createTts, edge engine, relayUrl)
+  participant R as App route (free-tts/server)
+  participant M as Microsoft (wss, Edge UA ≥137)
+  B->>B: mode auto: Edge ≥137 → direct, else relay
+  B->>R: POST {text, voice}
+  R->>R: voice in catalog? text ≤ maxChars? authorize(req)?
+  R->>M: Edge engine in Node (v2 token, Origin + Edge UA)
+  M-->>R: MP3
+  R-->>B: 200 audio/mpeg, or 4xx/5xx JSON {kind}
+  B->>B: rebuild TtsError{kind} → same retry + cache rules
+```
+
+- **Server** `free-tts/server`: `createRelayHandler({ maxChars = 2000, authorize?, edge? })` returns a
+  Fetch-standard `(Request) => Promise<Response>` (used as-is by a Next.js route handler) plus
+  `toNodeHandler(handler)` for Express / `node:http`. Validation: unknown voice → `400 {kind:"unknown-voice"}`,
+  text too long → `413`, `authorize` false → `403`, engine failure → `502 {kind}`. Stateless: cache
+  and scheduler stay in the browser instance; rate limiting is the app's job.
+- **Browser**: the `edge` engine takes `relayUrl` and `mode: "auto" | "direct" | "relay"`
+  (default `auto` when `relayUrl` is set, `direct` otherwise). `auto` picks **direct** when
+  `navigator.userAgent` is Edge ≥ 137 and **relay** otherwise; if a direct attempt in `auto` mode ends
+  `rejected`, the engine switches to relay for the rest of the instance's life. In Node the engine is
+  always direct. Engine id and voices are identical in both modes, so cache keys, settings and
+  `resolveVoice` do not change.
+- **Deadlines over HTTP**: `firstByteMs` runs until the response headers, `stallMs` between body
+  chunks; a fetch error is `network`.
 
 ## free-tts/text
 
@@ -171,4 +206,5 @@ same remedy rany2/edge-tts applies; a second `rejected` is final.
 ## Distribution
 
 - Public repo `gmotyl/free-tts`, MIT, OpenSpec native in `openspec/`.
+- Entries: `free-tts`, `free-tts/text`, `free-tts/server`.
 - Published to npm as `free-tts` 0.1.0 from a tag-triggered workflow; consumers pin exact versions.
