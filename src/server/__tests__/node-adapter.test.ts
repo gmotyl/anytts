@@ -1,4 +1,4 @@
-import { createServer, type Server } from "node:http";
+import { createServer, request, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { toNodeHandler } from "../index.js";
@@ -10,8 +10,11 @@ afterEach(async () => {
   server = undefined;
 });
 
-async function listen(handler: (req: Request) => Promise<Response>): Promise<string> {
-  server = createServer(toNodeHandler(handler));
+async function listen(
+  handler: (req: Request) => Promise<Response>,
+  options?: Parameters<typeof toNodeHandler>[1],
+): Promise<string> {
+  server = createServer(toNodeHandler(handler, options));
   await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
   return `http://127.0.0.1:${(server!.address() as AddressInfo).port}`;
 }
@@ -61,5 +64,74 @@ describe("toNodeHandler", () => {
     expect(err.status).toBe(502);
     expect(err.headers.get("content-type")).toMatch(/^application\/json/);
     expect(await err.json()).toEqual({ kind: "stalled" });
+  });
+
+  it("node adapter keeps the standard reason phrase", async () => {
+    const base = await listen(async () => Response.json({ kind: "stalled" }, { status: 502 }));
+    const res = await fetch(base, { method: "POST", body: "{}" });
+    expect(res.status).toBe(502);
+    expect(res.statusText).toBe("Bad Gateway");
+  });
+
+  it("node adapter caps the request body", async () => {
+    let calls = 0;
+    const base = await listen(
+      async () => {
+        calls++;
+        return new Response("ok");
+      },
+      { maxBodyBytes: 16 },
+    );
+
+    const ok = await fetch(base, { method: "POST", body: "x".repeat(16) });
+    expect(ok.status).toBe(200);
+    expect(calls).toBe(1);
+
+    // Chunked (no content-length): the adapter must stop reading at the cap.
+    const chunked = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(10));
+        controller.enqueue(new Uint8Array(10));
+        controller.close();
+      },
+    });
+    const big = await fetch(base, { method: "POST", body: chunked, duplex: "half" } as RequestInit);
+    expect(big.status).toBe(413);
+    const declared = await fetch(base, { method: "POST", body: "x".repeat(17) });
+    expect(declared.status).toBe(413);
+    expect(calls).toBe(1);
+  });
+
+  it("node adapter stops streaming when the client leaves during backpressure", async () => {
+    let cancelled = false;
+    const chunk = new Uint8Array(256 * 1024);
+    const base = await listen(
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              controller.enqueue(chunk);
+            },
+            cancel() {
+              cancelled = true;
+            },
+          }),
+        ),
+    );
+
+    // Read the headers, never the body, then hang up.
+    await new Promise<void>((resolve, reject) => {
+      const req = request(base, { method: "POST" }, (res) => {
+        res.pause();
+        setTimeout(() => {
+          req.destroy();
+          resolve();
+        }, 50);
+      });
+      req.on("error", reject);
+      req.end();
+    });
+
+    await expect.poll(() => cancelled, { timeout: 2000 }).toBe(true);
   });
 });

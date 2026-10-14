@@ -8,6 +8,31 @@ export interface RelayHandlerOptions {
   authorize?: (req: Request) => boolean | Promise<boolean>;
 }
 
+/** Reads at most `cap` bytes of the body; `undefined` when it is larger. */
+async function readCapped(req: Request, cap: number): Promise<string | undefined> {
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > cap) {
+      reader.cancel().catch(() => {});
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return new TextDecoder().decode(out);
+}
+
 const json = (status: number, body: { kind?: TtsErrorKind; error?: string }) =>
   Response.json(body, { status });
 
@@ -21,6 +46,9 @@ export function createRelayHandlerWith(
 ): (req: Request) => Promise<Response> {
   const { maxChars = 2000, authorize } = options;
   const voiceIds = new Set(engine.voices.map((v) => v.id));
+  // Worst case 4 UTF-8 bytes per code unit (escapes aside) plus JSON overhead.
+  const maxBodyBytes = maxChars * 4 + 1024;
+  const tooLarge = () => json(413, { error: `body larger than ${maxBodyBytes} bytes` });
 
   return async (req) => {
     if (req.method !== "POST") {
@@ -30,9 +58,13 @@ export function createRelayHandlerWith(
       });
     }
 
+    const declared = Number(req.headers.get("content-length") ?? NaN);
+    if (declared > maxBodyBytes) return tooLarge();
     let body: unknown;
     try {
-      body = await req.json();
+      const raw = await readCapped(req, maxBodyBytes);
+      if (raw === undefined) return tooLarge();
+      body = JSON.parse(raw);
     } catch {
       return json(400, { error: "invalid JSON body" });
     }

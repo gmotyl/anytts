@@ -82,4 +82,39 @@ describe("createRelayHandler", () => {
     expect((await handler(post({ text: 1, voice: VOICE }))).status).toBe(400);
     expect(synthesize).not.toHaveBeenCalled();
   });
+
+  it("rejects an oversized body before parsing it", async () => {
+    const { engine, synthesize } = fakeEngine();
+    const handler = createRelayHandlerWith(engine, { maxChars: 10 });
+
+    // Declared too large: answered from the header alone, body untouched.
+    const declared = new Request("http://relay.test/api/tts", {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-length": "100000" },
+      body: JSON.stringify({ text: "Hi", voice: VOICE }),
+    });
+    const res = await handler(declared);
+    expect(res.status).toBe(413);
+    expect(declared.bodyUsed).toBe(false);
+
+    // Undeclared (streamed) and too large: reading stops at the cap.
+    let pulls = 0;
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls++;
+        controller.enqueue(new Uint8Array(1024).fill(0x20));
+      },
+    });
+    const streamed = new Request("http://relay.test/api/tts", {
+      method: "POST",
+      body: endless,
+      duplex: "half",
+    } as RequestInit);
+    expect((await handler(streamed)).status).toBe(413);
+    expect(pulls).toBeLessThan(10);
+    expect(synthesize).not.toHaveBeenCalled();
+
+    // A body within the cap still works.
+    expect((await handler(post({ text: "1234567890", voice: VOICE }))).status).toBe(200);
+  });
 });
