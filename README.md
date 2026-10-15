@@ -74,8 +74,8 @@ firstSentence("Hello there. More text follows."); // "Hello there."
 
 Pronunciation entries match as `word` (the default for bare strings: whole word plus an
 optional plural "s", case-insensitive), `stem` (word start, inflected endings kept) or `exact`
-(whole word, case-sensitive, for acronyms). The same helpers are also exported from the package
-root.
+(whole word, case-sensitive, for acronyms). The text helpers are exported only from
+`anytts/text`, not from the package root.
 
 ## Engine and voice settings
 

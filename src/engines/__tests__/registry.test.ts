@@ -64,6 +64,14 @@ describe("registry", () => {
     expect(createEdgeEngine().voices).toEqual(voices);
   });
 
+  it("returned voices are copies of the catalog", () => {
+    const [first] = listVoices("edge");
+    const id = first!.id;
+    first!.id = "mutated";
+    expect(listVoices("edge")[0]!.id).toBe(id);
+    expect(createEdgeEngine().voices[0]!.id).toBe(id);
+  });
+
   it("unknown engine has no voices", () => {
     expect(listVoices("nope")).toEqual([]);
   });

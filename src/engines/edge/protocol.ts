@@ -39,8 +39,10 @@ function timestamp(d: Date): string {
   );
 }
 
+// getRandomValues, not randomUUID: the latter is missing on insecure (plain http) browser origins.
 export function newRequestId(): string {
-  return crypto.randomUUID().replaceAll("-", "");
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export function escapeXml(text: string): string {

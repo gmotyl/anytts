@@ -176,6 +176,29 @@ describe("createTts", () => {
     expect(edge.calls).toHaveLength(1);
   });
 
+  it("an aborted signal rejects on a cache hit", async () => {
+    const { tts, edge } = setup();
+    const first = tts.synthesize({ text: "a" });
+    await flush();
+    edge.calls[0]!.resolve(bytes(1));
+    await first;
+    const controller = new AbortController();
+    controller.abort();
+    await expect(tts.synthesize({ text: "a", signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("a prototype key is not an engine id", () => {
+    const { factories } = setup();
+    for (const id of ["constructor", "toString", "__proto__"]) {
+      const config: TtsConfig = {
+        engines: { [id]: { voices: { default: "x" } } },
+        defaultEngine: id,
+        scheduler: { concurrency: 1, tiers: [{ name: "play" }] },
+      };
+      expect(() => createTts(config, { engineFactories: factories })).toThrow(RangeError);
+    }
+  });
+
   it("failures are not cached", async () => {
     const { tts, edge } = setup({ retries: 0 });
     const first = tts.synthesize({ text: "a" });

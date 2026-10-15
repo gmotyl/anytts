@@ -20,5 +20,5 @@ export function listEngines(): EngineInfo[] {
 
 /** The engine's voice catalog; `[]` for an unknown engine. */
 export function listVoices(engineId: string): VoiceInfo[] {
-  return [...(ENGINES.find(({ info }) => info.id === engineId)?.voices ?? [])];
+  return (ENGINES.find(({ info }) => info.id === engineId)?.voices ?? []).map((voice) => ({ ...voice }));
 }

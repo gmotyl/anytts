@@ -76,7 +76,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
   const factories = { ...BUILTIN_ENGINES, ...internals.engineFactories };
   const engines = new Map<string, { engine: Engine; config: EngineConfig }>();
   for (const [id, engineConfig] of Object.entries(config.engines)) {
-    const factory = factories[id];
+    const factory = Object.hasOwn(factories, id) ? factories[id] : undefined;
     if (!factory) throw new RangeError(`unknown engine: ${id}`);
     const { voices: _voices, retries: _retries, ...options } = engineConfig;
     engines.set(id, { engine: factory(options), config: engineConfig });
@@ -143,10 +143,10 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     } catch (error) {
       return Promise.reject(error);
     }
-    const hit = cache.get(r.key);
-    if (hit) return Promise.resolve({ ...hit });
     const { signal } = req;
     if (signal?.aborted) return Promise.reject(abortError());
+    const hit = cache.get(r.key);
+    if (hit) return Promise.resolve({ ...hit });
 
     const tier = req.tier ?? defaultTier ?? "";
     let flight = inFlight.get(r.key);

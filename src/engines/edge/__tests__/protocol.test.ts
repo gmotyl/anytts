@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { buildConfigMessage, buildSsmlMessage, escapeXml, parseFrame } from "../protocol.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildConfigMessage, buildSsmlMessage, escapeXml, newRequestId, parseFrame } from "../protocol.js";
 
 const DATE = new Date(Date.UTC(2026, 9, 14, 17, 5, 9));
 
@@ -99,5 +99,18 @@ describe("edge wire protocol", () => {
       kind: "text",
       path: "turn.start",
     });
+  });
+});
+
+describe("newRequestId", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("works without crypto.randomUUID (insecure browser origin)", () => {
+    const { getRandomValues } = crypto;
+    vi.stubGlobal("crypto", { getRandomValues: getRandomValues.bind(crypto) });
+    const a = newRequestId();
+    const b = newRequestId();
+    expect(a).toMatch(/^[0-9a-f]{32}$/);
+    expect(b).not.toBe(a);
   });
 });
