@@ -84,7 +84,11 @@ const listener = (e: TtsEvent): void => {
   void key;
 };
 const unsubscribe: () => void = tts.subscribe(listener);
-export { tts, units, nodeHandler, err, voices, state, unsubscribe, applyPronunciation, plPreset };
+// Reverse direction: the new literals must be assignable to TtsEvent, so a dist that
+// regressed to the old two-type union fails here rather than passing silently.
+const pending: TtsEvent = { type: "pending", key: "k" };
+const dropped: TtsEvent = { type: "drop", key: "k" };
+export { tts, units, nodeHandler, err, voices, state, unsubscribe, pending, dropped, applyPronunciation, plPreset };
 `,
   );
   writeFileSync(

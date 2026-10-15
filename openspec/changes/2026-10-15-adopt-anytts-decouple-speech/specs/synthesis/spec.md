@@ -11,8 +11,8 @@ queued or running, and `"cold"` otherwise.
 
 #### Scenario: Pending from the call until the result
 - **WHEN** `synthesize` or `prefetch` is called for a key that is neither cached nor in flight
-- **THEN** `state` answers `pending` immediately, before the engine is reached, and `ready` once the
-  result is cached.
+- **THEN** `state` answers `pending` synchronously after the call, whether the job is queued or
+  already running, and `ready` once the result is cached.
 
 #### Scenario: Back to cold on failure
 - **WHEN** a pending request fails for good or is aborted with no caller left
