@@ -1,7 +1,7 @@
 # Design: anytts v1
 
 Grilled 2026-10-14 (log: `projects/pavilio/progress/2026-10-14-shared-tts-library-grill.md` in the
-private workspace). Glossary: workspace `projects/free-tts/CONTEXT.md` — **Engine**, **Voice**,
+private workspace). Glossary: workspace `projects/anytts/CONTEXT.md` — **Engine**, **Voice**,
 **Voice map**, **Forced language**, **Pronunciation map**.
 
 **Name (2026-10-15):** published as `anytts`, not `free-tts`. The library is one TTS API over
