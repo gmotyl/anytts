@@ -53,9 +53,9 @@ export interface Tts {
 - "state answers cold for an unknown voice without throwing"
 - "unsubscribe silences both cache and in-flight events"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run --project node src/__tests__/tts.test.ts` — Expected: FAIL (`state is not a function`, missing events)
-- [ ] **Step 2: Minimal implementation** — Run: `pnpm vitest run --project node src/__tests__/tts.test.ts && pnpm lint` — Expected: PASS, no type errors
-- [ ] **Step 3: Commit** — `git add src/tts.ts src/index.ts src/__tests__/tts.test.ts && git commit -m "feat(tts): state() query and pending/drop cache events"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run --project node src/__tests__/tts.test.ts` — Expected: FAIL (`state is not a function`, missing events)
+- [x] **Step 2: Minimal implementation** — Run: `pnpm vitest run --project node src/__tests__/tts.test.ts && pnpm lint` — Expected: PASS, no type errors
+- [x] **Step 3: Commit** — `git add src/tts.ts src/index.ts src/__tests__/tts.test.ts && git commit -m "feat(tts): state() query and pending/drop cache events"`
 
 ### Task 2: README and package surface
 
