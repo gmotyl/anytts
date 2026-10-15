@@ -1,10 +1,10 @@
-# free-tts v1 Implementation Plan
+# anytts v1 Implementation Plan
 
 > **For agentic workers:** implement this plan with [[pavilio-execute-plan]] — task-by-task, top-down; check off each step (`- [ ]` → `- [x]`) as it lands. Do one task fully (test → implement → verify → commit) before starting the next.
 
-**Goal:** Ship `free-tts@0.1.0` — Edge engine with its own client, cache, tiered scheduler, voice API and `free-tts/text` — usable from the browser and Node.
+**Goal:** Ship `anytts@0.1.0` — Edge engine with its own client, cache, tiered scheduler, voice API and `anytts/text` — usable from the browser and Node.
 
-**Architecture:** Core entry `free-tts` (`createTts` → cache → scheduler → engine → transport or Relay), an independent `free-tts/text` entry and a `free-tts/server` Relay handler for non-Edge browsers. Pure TypeScript, ESM-only, zero runtime dependencies; every network edge sits behind an injectable transport so the suite runs on fakes.
+**Architecture:** Core entry `anytts` (`createTts` → cache → scheduler → engine → transport or Relay), an independent `anytts/text` entry and a `anytts/server` Relay handler for non-Edge browsers. Pure TypeScript, ESM-only, zero runtime dependencies; every network edge sits behind an injectable transport so the suite runs on fakes.
 
 **Tech Stack:** TypeScript, pnpm, vitest (`node` + `jsdom` projects), `tsc` build, GitHub Actions, npm.
 
@@ -22,7 +22,7 @@
 **Contract:**
 ```jsonc
 // package.json (essentials)
-{ "name": "free-tts", "version": "0.0.0", "type": "module", "license": "MIT",
+{ "name": "anytts", "version": "0.0.0", "type": "module", "license": "MIT",
   "engines": { "node": ">=22" }, "sideEffects": false, "dependencies": {},
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
                "./text": { "types": "./dist/text/index.d.ts", "import": "./dist/text/index.js" },
@@ -33,8 +33,8 @@ vitest projects: `node` (`src/**/__tests__/*.test.ts`, environment node), `jsdom
 
 **Verification: non-testable** — Run: `pnpm install && pnpm lint && pnpm build && pnpm test` — Expected: build emits `dist/index.js` and `dist/text/index.js`; vitest exits 0 with no test files treated as passing (`--passWithNoTests`).
 
-- [ ] **Step 1: Scaffold + verify** — commands above
-- [ ] **Step 2: Commit** — `git add -A && git commit -m "chore: scaffold free-tts package"`
+- [x] **Step 1: Scaffold + verify** — commands above
+- [x] **Step 2: Commit** — `git add -A && git commit -m "chore: scaffold anytts package"`
 
 ### Task 2: Typed errors
 
@@ -57,9 +57,9 @@ export const isTransient: (kind: TtsErrorKind) => boolean; // true only for firs
 - "TtsError carries its kind and is an Error"
 - "only first-byte-timeout, stalled and network are transient"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/__tests__/errors.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat: typed TtsError"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/__tests__/errors.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat: typed TtsError"`
 
 ### Task 3: Sec-MS-GEC v2 token
 
@@ -77,9 +77,9 @@ export const isTransient: (kind: TtsErrorKind) => boolean; // true only for firs
 - "computes without Web Crypto"
 - "applies the clock offset"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/token.test.ts` — Expected: FAIL
-- [ ] **Step 2: Move the module in, generate vectors** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git add scripts src/engines/edge && git commit -m "feat(edge): Sec-MS-GEC v2 token with golden vectors"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/token.test.ts` — Expected: FAIL
+- [x] **Step 2: Move the module in, generate vectors** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git add scripts src/engines/edge && git commit -m "feat(edge): Sec-MS-GEC v2 token with golden vectors"`
 
 ### Task 4: Edge wire protocol
 
@@ -100,9 +100,9 @@ export const isTransient: (kind: TtsErrorKind) => boolean; // true only for firs
 - "binary frame yields audio after headers"
 - "turn.end frame ends the turn"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/protocol.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat(edge): wire protocol"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/protocol.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat(edge): wire protocol"`
 
 ### Task 5: WebSocket transport
 
@@ -123,9 +123,9 @@ export interface Transport { open(url: string, headers: Record<string, string>):
 - "node transport sends Origin and User-Agent"
 - "browser transport passes no headers argument"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/transport` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat(edge): injectable WebSocket transport"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/transport` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat(edge): injectable WebSocket transport"`
 
 ### Task 6: Edge engine attempt — deadlines, failure mapping, clock skew
 
@@ -166,9 +166,9 @@ export interface EdgeEngineOptions { firstByteMs?: number; stallMs?: number; tra
 - "a rejection with a Date header corrects clock skew once"
 - "a second rejection after skew correction is final"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/engine.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat(edge): engine attempt with deadlines and typed failures"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/engine.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat(edge): engine attempt with deadlines and typed failures"`
 
 ### Task 7: Voice catalog and engine listing
 
@@ -192,9 +192,9 @@ export interface EngineInfo { id: string; label: string; runtimes: ("browser" | 
 - "edge catalog includes Polish voices and both apps' voices"
 - "unknown engine has no voices"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/__tests__/registry.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat: voice catalog and engine listing"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/__tests__/registry.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat: voice catalog and engine listing"`
 
 ### Task 8: LRU cache with subscriptions
 
@@ -212,9 +212,9 @@ export interface EngineInfo { id: string; label: string; runtimes: ("browser" | 
 - "a read refreshes recency"
 - "notifies subscribers on add and evict"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/__tests__/cache.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat: lru cache with subscriptions"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/__tests__/cache.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat: lru cache with subscriptions"`
 
 ### Task 9: Tiered scheduler
 
@@ -242,9 +242,9 @@ export interface SchedulerConfig { concurrency: number; tiers: { name: string; c
 - "removed job never starts"
 - "unknown tier throws"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/__tests__/scheduler.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat: tiered scheduler with cumulative caps"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/__tests__/scheduler.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat: tiered scheduler with cumulative caps"`
 
 ### Task 10: createTts — synthesize, prefetch, join, retry, abort
 
@@ -294,9 +294,9 @@ export interface Tts {
 - "prefetch swallows failures"
 - "instances share no cache"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/__tests__/tts.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat: createTts with join, retry and abort"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/__tests__/tts.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat: createTts with join, retry and abort"`
 
 ### Task 11: resolveVoice
 
@@ -322,11 +322,11 @@ export function resolveVoice(tts: Tts, q: { engine: string; voice?: string; lang
 - "falls back to default without a language voice"
 - "nothing saved resolves to default without fallback"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/__tests__/voices.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat: resolveVoice for settings UIs"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/__tests__/voices.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat: resolveVoice for settings UIs"`
 
-### Task 12: Relay handler (`free-tts/server`)
+### Task 12: Relay handler (`anytts/server`)
 
 **Files:**
 - Create: `src/server/index.ts` (`createRelayHandler`, `toNodeHandler`)
@@ -357,9 +357,9 @@ export function toNodeHandler(h: (req: Request) => Promise<Response>): (req: Inc
 - "engine failure becomes 502 with its kind"
 - "node adapter mirrors the fetch response"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/server` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/server && git commit -m "feat(server): relay handler with node adapter"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/server` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/server && git commit -m "feat(server): relay handler with node adapter"`
 
 ### Task 13: Browser engine chooses direct or relay
 
@@ -389,9 +389,9 @@ export interface EdgeEngineOptions { /* …Task 6 fields… */ relayUrl?: string
 - "relay deadlines map to first-byte-timeout and stalled"
 - "direct and relay share engine id and cache key"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/relay-mode.browser.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat(edge): auto direct/relay mode for browsers"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/edge/__tests__/relay-mode.browser.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat(edge): auto direct/relay mode for browsers"`
 
 ### Task 14: Pronunciation maps per spoken language
 
@@ -422,9 +422,9 @@ export function applyPronunciation(text: string, lang: string | undefined, maps?
 - "ordinary prose survives the pl preset"
 - (ported motyl tests, names kept)
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/text/__tests__/pronunciation.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/text && git commit -m "feat(text): per-language pronunciation maps with pl preset"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/text/__tests__/pronunciation.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/text && git commit -m "feat(text): per-language pronunciation maps with pl preset"`
 
 ### Task 15: Unit packing and first sentence
 
@@ -452,29 +452,29 @@ export function firstSentence(text: string): string | null;
 - "long paragraph is cut on sentences then words"
 - "first sentence is extracted"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/text/__tests__/units.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat(text): packUnits and firstSentence"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/text/__tests__/units.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat(text): packUnits and firstSentence"`
 
 ### Task 16: Package entries are clean for Node and the browser
 
 **Files:**
-- Create: `test/package/consume.test.ts` (packs the tarball and imports it in a temp Node project), `test/package/vite-bundle.test.ts` (bundles `free-tts` and `free-tts/text` with Vite)
+- Create: `test/package/consume.test.ts` (packs the tarball and imports it in a temp Node project), `test/package/vite-bundle.test.ts` (bundles `anytts` and `anytts/text` with Vite)
 - Modify: `package.json` (`files`, devDependency `vite`)
 
 **Acceptance criteria:**
-- WHEN the packed tarball is installed in a temp Node 22 project THEN all three entries import with types and `node_modules` holds no runtime dependency of free-tts
-- WHEN Vite bundles an import of `free-tts` THEN the build succeeds without Node built-in polyfills and contains no `free-tts/server` code
-- WHEN Vite bundles only `free-tts/text` THEN the output contains no token, transport or engine code
+- WHEN the packed tarball is installed in a temp Node 22 project THEN all three entries import with types and `node_modules` holds no runtime dependency of anytts
+- WHEN Vite bundles an import of `anytts` THEN the build succeeds without Node built-in polyfills and contains no `anytts/server` code
+- WHEN Vite bundles only `anytts/text` THEN the output contains no token, transport or engine code
 
 **Tests (names only — red first):**
 - "packed package imports in node 22"
 - "browser bundle needs no node built-ins and excludes the server"
 - "text entry bundles without engine code"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run test/package` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — same command — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "test: package entries for node and browser"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run test/package` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — same command — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "test: package entries for node and browser"`
 
 ### Task 17: Live contract test and nightly workflow
 
@@ -488,28 +488,28 @@ export function firstSentence(text: string): string | null;
 
 **Verification: non-testable** (the test *is* the deliverable) — Run: `pnpm test:live` — Expected: PASS against Microsoft; `pnpm test` shows no live test.
 
-- [ ] **Step 1: Write the live test + workflow, run both commands**
-- [ ] **Step 2: Commit** — `git commit -am "test: live Edge contract test and nightly workflow"`
+- [x] **Step 1: Write the live test + workflow, run both commands**
+- [x] **Step 2: Commit** — `git commit -am "test: live Edge contract test and nightly workflow"`
 
 ### Task 18: CI and release workflows
 
 **Files:**
 - Create: `.github/workflows/ci.yml` (lint, build, `pnpm test` on PRs and `main`), `.github/workflows/release.yml` (on tag `v*`: test, build, `npm publish --provenance`)
-- Modify: `README.md` (install, `createTts` / `free-tts/text` examples, engine/voice settings flow)
+- Modify: `README.md` (install, `createTts` / `anytts/text` examples, engine/voice settings flow)
 
 **Verification: non-testable** — Run: `pnpm lint && pnpm build && pnpm test` locally; `actionlint` on both workflows if available — Expected: green, workflows valid.
 
-- [ ] **Step 1: Write workflows + README, verify**
-- [ ] **Step 2: Commit** — `git commit -am "ci: test on PRs, publish on tags"`
+- [x] **Step 1: Write workflows + README, verify**
+- [x] **Step 2: Commit** — `git commit -am "ci: test on PRs, publish on tags"`
 
 ### Task 19: Publish 0.1.0 (user-gated)
 
 **Acceptance criteria:**
-- WHEN the user confirms THEN public repo `gmotyl/free-tts` exists, `main` is pushed, the `NPM_TOKEN` secret is set by the user, and tag `v0.1.0` publishes `free-tts@0.1.0`
-- WHEN `npm view free-tts version` runs THEN it prints `0.1.0`
+- WHEN the user confirms THEN public repo `gmotyl/anytts` exists, `main` is pushed, the `NPM_TOKEN` secret is set by the user, and tag `v0.1.0` publishes `anytts@0.1.0`
+- WHEN `npm view anytts version` runs THEN it prints `0.1.0`
 
-**Verification: non-testable** — Run: `npm view free-tts version` — Expected: `0.1.0`
+**Verification: non-testable** — Run: `npm view anytts version` — Expected: `0.1.0`
 
 - [ ] **Step 1: Ask the user to confirm creating the public repo and publishing** — outward-facing, never without a yes
-- [ ] **Step 2: `gh repo create gmotyl/free-tts --public --source . --push`; bump version to 0.1.0, tag, push tag**
+- [ ] **Step 2: `gh repo create gmotyl/anytts --public --source . --push`; bump version to 0.1.0, tag, push tag**
 - [ ] **Step 3: Confirm on npm and record the version in the workspace progress note**

@@ -1,4 +1,4 @@
-# Proposal: free-tts v1 — one speech engine for pavilio and motyl.dev
+# Proposal: anytts v1 — one speech engine for pavilio and motyl.dev
 
 ## Problem
 
@@ -29,7 +29,7 @@ the dependency.
 
 ## What changes
 
-A new public library **free-tts** (`gmotyl/free-tts`, npm `free-tts`), runtime-agnostic (browser and
+A new public library **anytts** (`gmotyl/anytts`, npm `anytts`), runtime-agnostic (browser and
 Node), zero runtime dependencies:
 
 - **Engines** behind one interface; v1 ships the **Edge engine** with its own read-aloud client:
@@ -42,9 +42,9 @@ Node), zero runtime dependencies:
 - **Voices**: `listEngines`, `listVoices(engine)`, `resolveVoice`; a **Voice map** per engine
   (`{pl, en, default}`) is the only way to force a language — the Edge endpoint ignores or rejects
   every SSML language hint (spike 2026-10-14).
-- **Relay** (`free-tts/server`): a stateless Fetch-standard handler that synthesizes in Node with an
+- **Relay** (`anytts/server`): a stateless Fetch-standard handler that synthesizes in Node with an
   Edge User-Agent; the browser engine uses it automatically outside Edge (`mode: "auto"`).
-- **`free-tts/text`**: per-language **Pronunciation maps** (shipped `pl` preset = motyl's strict
+- **`anytts/text`**: per-language **Pronunciation maps** (shipped `pl` preset = motyl's strict
   map), `packUnits`, `firstSentence`.
 
 ## Out of scope
@@ -52,7 +52,7 @@ Node), zero runtime dependencies:
 - Adopting the library in pavilio or motyl — separate proposals in each project's store.
 - Markdown stripping and language detection — they diverged per app and stay there.
 - Playback (MSE carriers, audio elements, media session) — app-owned.
-- Piper (offline browser engine) — separate free-tts proposal.
+- Piper (offline browser engine) — separate anytts proposal.
 - Mounting the Relay route, rate limiting and abuse protection — each app's adoption proposal.
 
 ## Preconditions
@@ -66,4 +66,4 @@ Node), zero runtime dependencies:
 - A fake transport answering 403 makes `synthesize` reject `rejected` within the deadline.
 - In a non-Edge browser environment with `relayUrl`, synthesis goes through the Relay and returns audio.
 - Live contract test (one short synthesis + voice list) green manually and in a nightly workflow.
-- `free-tts@0.1.0` installable from npm in a scratch project, in Node and in a browser bundle.
+- `anytts@0.1.0` installable from npm in a scratch project, in Node and in a browser bundle.

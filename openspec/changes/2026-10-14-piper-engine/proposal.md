@@ -1,6 +1,6 @@
 # Proposal: Piper engine — a free, offline browser fallback
 
-> **Status: proposal only** — deferred from the free-tts v1 grill (2026-10-14). Grill before
+> **Status: proposal only** — deferred from the anytts v1 grill (2026-10-14). Grill before
 > design/tasks.
 
 ## Problem
