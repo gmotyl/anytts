@@ -5,6 +5,12 @@
   "type": "module",
   "license": "MIT",
   "author": "Greg Motyl",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gmotyl/anytts.git"
+  },
+  "homepage": "https://github.com/gmotyl/anytts#readme",
+  "bugs": "https://github.com/gmotyl/anytts/issues",
   "engines": {
     "node": ">=22"
   },
