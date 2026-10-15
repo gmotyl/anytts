@@ -69,8 +69,8 @@ export interface Tts {
 
 **Verification: non-testable** — Run: `pnpm build && pnpm test` — Expected: all three projects PASS; `grep -n "state(" README.md` finds the new subsection
 
-- [ ] **Step 1: Write the README subsection; extend the package test if it lists the surface** — Run: `pnpm build && pnpm test` — Expected: PASS
-- [ ] **Step 2: Commit** — `git add README.md test/package && git commit -m "docs: document state() and in-flight events"`
+- [x] **Step 1: Write the README subsection; extend the package test if it lists the surface** — Run: `pnpm build && pnpm test` — Expected: PASS
+- [x] **Step 2: Commit** — `git add README.md test/package && git commit -m "docs: document state() and in-flight events"`
 
 ### Task 3: Release 0.2.0
 
