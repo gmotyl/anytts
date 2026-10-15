@@ -65,7 +65,7 @@ console.log(JSON.stringify({ root: kinds(root), text: kinds(text), server: kinds
   writeFileSync(
     join(dir, "consumer.ts"),
     `
-import { createTts, TtsError, type Tts, type TtsConfig, type VoiceInfo } from "anytts";
+import { createTts, TtsError, type Tts, type TtsConfig, type TtsEvent, type VoiceInfo } from "anytts";
 import { packUnits, applyPronunciation, plPreset, type Unit } from "anytts/text";
 import { createRelayHandler, toNodeHandler } from "anytts/server";
 
@@ -76,7 +76,15 @@ const handler: (req: Request) => Promise<Response> = createRelayHandler();
 const nodeHandler = toNodeHandler(handler);
 const err: unknown = new TtsError("rejected", "x");
 const voices: VoiceInfo[] = [];
-export { tts, units, nodeHandler, err, voices, applyPronunciation, plPreset };
+const state: "cold" | "pending" | "ready" = tts.state({ text: "x" });
+const listener = (e: TtsEvent): void => {
+  const type: "pending" | "add" | "drop" | "evict" = e.type;
+  const key: string = e.key;
+  void type;
+  void key;
+};
+const unsubscribe: () => void = tts.subscribe(listener);
+export { tts, units, nodeHandler, err, voices, state, unsubscribe, applyPronunciation, plPreset };
 `,
   );
   writeFileSync(
