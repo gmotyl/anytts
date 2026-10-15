@@ -33,8 +33,6 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
-      # NPM_TOKEN is a stage-only token: CI stages the version, a maintainer approves it with 2FA.
+      # Auth via npm trusted publishing (OIDC, id-token: write); CI stages, a maintainer approves with 2FA.
       - run: npm install -g npm@^11.15.0
       - run: npm stage publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
