@@ -1,4 +1,4 @@
-import { LruCache, type CacheListener } from "./cache.js";
+import { LruCache } from "./cache.js";
 import type { Engine } from "./engine.js";
 import { createEdgeEngine, type EdgeEngineOptions } from "./engines/edge/engine.js";
 import { isTransient, TtsError } from "./errors.js";
@@ -35,11 +35,22 @@ export interface TtsConfig {
   cache?: { max?: number };
 }
 
+/**
+ * Lifecycle of a request key: `pending` when it enters the in-flight map, `add` when its result is
+ * cached, `drop` when it leaves the map without a result (final failure or abandonment), `evict`
+ * when the LRU removes the cached result.
+ */
+export type TtsEvent = { type: "pending" | "add" | "drop" | "evict"; key: string };
+
+export type TtsListener = (e: TtsEvent) => void;
+
 export interface Tts {
   synthesize(req: SynthesisRequest): Promise<SynthesisResult>;
   prefetch(req: SynthesisRequest): void;
   isCached(req: SynthesisRequest): boolean;
-  subscribe(listener: (e: { type: "add" | "evict"; key: string }) => void): () => void;
+  /** `ready` when cached, `pending` while queued or running, `cold` otherwise (including unknown voices). */
+  state(req: SynthesisRequest): "cold" | "pending" | "ready";
+  subscribe(listener: TtsListener): () => void;
 }
 
 export type EngineFactory = (options: EdgeEngineOptions) => Engine;
@@ -87,6 +98,29 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
   const scheduler = createScheduler(config.scheduler);
   const defaultTier = config.scheduler.tiers[0]?.name;
   const inFlight = new Map<string, InFlight>();
+  // In-flight (`pending` / `drop`) listeners; cache events come straight from `LruCache`.
+  const listeners = new Set<TtsListener>();
+
+  const emit = (e: TtsEvent): void => {
+    for (const listener of [...listeners]) {
+      // A faulty listener must not break synthesis or starve the other listeners.
+      try {
+        listener(e);
+      } catch {
+        // ignored
+      }
+    }
+  };
+
+  /**
+   * Removes `flight` from the in-flight map once; the removal that finds no cached result is the
+   * `drop`. A later settle for the same flight (the `job.done` release after an abort) is a no-op.
+   */
+  const settle = (key: string, flight: InFlight): void => {
+    if (inFlight.get(key) !== flight) return;
+    inFlight.delete(key);
+    if (!cache.has(key)) emit({ type: "drop", key });
+  };
 
   /** Throws RangeError for an unconfigured engine and `unknown-voice` for a voice outside its catalog. */
   const resolve = (req: SynthesisRequest): Resolved => {
@@ -129,9 +163,8 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     });
     const flight: InFlight = { job, controller, callers: 0 };
     inFlight.set(r.key, flight);
-    const release = () => {
-      if (inFlight.get(r.key) === flight) inFlight.delete(r.key);
-    };
+    emit({ type: "pending", key: r.key });
+    const release = () => settle(r.key, flight);
     job.done.then(release, release);
     return flight;
   };
@@ -168,7 +201,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
         joined.callers--;
         if (joined.callers === 0) {
           // Nobody is waiting any more: drop the queued job or stop the running one.
-          if (inFlight.get(r.key) === joined) inFlight.delete(r.key);
+          settle(r.key, joined);
           if (!joined.job.remove()) joined.controller.abort();
         }
         rejectPromise(abortError());
@@ -203,8 +236,21 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
         return false;
       }
     },
-    subscribe(listener: CacheListener) {
-      return cache.subscribe(listener);
+    state(req) {
+      try {
+        const { key } = resolve(req);
+        return cache.has(key) ? "ready" : inFlight.has(key) ? "pending" : "cold";
+      } catch {
+        return "cold";
+      }
+    },
+    subscribe(listener) {
+      const unsubscribeCache = cache.subscribe(listener);
+      listeners.add(listener);
+      return () => {
+        unsubscribeCache();
+        listeners.delete(listener);
+      };
     },
   };
   registerVoiceSource(

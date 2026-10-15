@@ -221,7 +221,10 @@ describe("edge engine direct/relay mode (browser)", () => {
         scheduler: { concurrency: 1, tiers: [{ name: "play" }] },
       });
       const keys: string[] = [];
-      tts.subscribe((e) => keys.push(e.key));
+      // Only the cached key matters here; `pending` precedes `add` for the same key.
+      tts.subscribe((e) => {
+        if (e.type === "add") keys.push(e.key);
+      });
       const promise = tts.synthesize({ text: "Cześć" });
       await Promise.resolve();
       FakeSocket.instances.at(-1)?.speak([7]);
