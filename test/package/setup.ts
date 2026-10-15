@@ -14,7 +14,7 @@ const repo = resolve(import.meta.dirname, "../..");
 
 // Build once and pack once for every package test, so test files never race on dist/.
 export default function setup(project: TestProject): () => void {
-  const packDir = mkdtempSync(join(tmpdir(), "free-tts-pack-"));
+  const packDir = mkdtempSync(join(tmpdir(), "anytts-pack-"));
   const cleanup = () => rmSync(packDir, { recursive: true, force: true });
   try {
     execFileSync("pnpm", ["build"], { cwd: repo, stdio: "pipe" });

@@ -1,19 +1,19 @@
-# free-tts
+# anytts
 
-Free text-to-speech for the browser and Node, built on the Edge read-aloud service.
+Text-to-speech for the browser and Node with pluggable engines — starting with the free Edge read-aloud service.
 
 - Node ≥ 22 and modern browsers
 - ESM-only, TypeScript types included
 - Zero runtime dependencies
 
 ```sh
-npm i free-tts
+npm i anytts
 ```
 
 ## Quick start
 
 ```ts
-import { createTts } from "free-tts";
+import { createTts } from "anytts";
 
 const tts = createTts({
   engines: {
@@ -53,10 +53,10 @@ requests share one synthesis; asking again on a higher tier promotes the queued 
 `signal` rejects with an `AbortError`, and the job is cancelled once nobody is waiting for it.
 `bytes` is shared with the cache: do not detach or transfer it.
 
-## Text helpers: `free-tts/text`
+## Text helpers: `anytts/text`
 
 ```ts
-import { applyPronunciation, packUnits, firstSentence } from "free-tts/text";
+import { applyPronunciation, packUnits, firstSentence } from "anytts/text";
 
 // Respell words for the voice's language. Polish ships with a built-in preset; your map
 // extends it and overrides it per key.
@@ -82,7 +82,7 @@ root.
 For a settings UI, list what is available, then resolve a saved choice leniently:
 
 ```ts
-import { listEngines, listVoices, resolveVoice } from "free-tts";
+import { listEngines, listVoices, resolveVoice } from "anytts";
 
 listEngines(); // [{ id: "edge", label: "Microsoft Edge (read aloud)", runtimes: ["browser", "node"] }]
 listVoices("edge"); // [{ id, label, locale, gender, multilingual }, …]; [] for an unknown engine
@@ -108,7 +108,7 @@ only accepts Microsoft Edge (≥ 137), so other browsers need a relay on your se
 ```ts
 // server.ts (Node)
 import { createServer } from "node:http";
-import { createRelayHandler, toNodeHandler } from "free-tts/server";
+import { createRelayHandler, toNodeHandler } from "anytts/server";
 
 // Fetch-standard handler: POST { text, voice } → 200 audio/mpeg.
 const relay = createRelayHandler({
@@ -159,7 +159,7 @@ Transient kinds are retried automatically (`retries` per engine, default 1) and 
 with `isTransient(kind)`; the rest are final, so show them to the user rather than retrying.
 
 ```ts
-import { TtsError, isTransient } from "free-tts";
+import { TtsError, isTransient } from "anytts";
 
 try {
   await tts.synthesize({ text: "Hi" });

@@ -1,8 +1,13 @@
-# Design: free-tts v1
+# Design: anytts v1
 
 Grilled 2026-10-14 (log: `projects/pavilio/progress/2026-10-14-shared-tts-library-grill.md` in the
 private workspace). Glossary: workspace `projects/free-tts/CONTEXT.md` — **Engine**, **Voice**,
 **Voice map**, **Forced language**, **Pronunciation map**.
+
+**Name (2026-10-15):** published as `anytts`, not `free-tts`. The library is one TTS API over
+interchangeable engines; paid engines (API key) may become engines later, so "free" describes the
+current engines, not the library. Single-engine use stays the default; a multi-engine policy
+(fallback, rotation) is a future change layered on top. The change id keeps its original name.
 
 ## Architecture
 
@@ -11,11 +16,11 @@ flowchart LR
   subgraph app["Consumer app"]
     prep["markdown strip + language detection<br/>(app-owned)"]
   end
-  subgraph text["free-tts/text"]
+  subgraph text["anytts/text"]
     pron["applyPronunciation(text, lang)"]
     pack["packUnits / firstSentence"]
   end
-  subgraph core["free-tts"]
+  subgraph core["anytts"]
     tts["createTts(config).synthesize(...)"]
     cache["cache: LRU 200<br/>key (engine, voice, text)"]
     sched["scheduler: tiers + caps<br/>join/promote, abort"]
@@ -25,7 +30,7 @@ flowchart LR
   prep --> pron --> pack --> tts --> cache --> sched --> edge --> ws
 ```
 
-Three package entries: `free-tts` (core), `free-tts/text` (no engine code) and `free-tts/server`
+Three package entries: `anytts` (core), `anytts/text` (no engine code) and `anytts/server`
 (the Relay handler, Node/edge-runtime only).
 Pure TypeScript, ESM-only, zero runtime dependencies. Node ≥ 22 (global `WebSocket` accepts
 `{ headers }` — verified on 22.22: Origin, User-Agent and custom headers reach the server).
@@ -153,7 +158,7 @@ same remedy rany2/edge-tts applies; a second `rejected` is final.
 ```mermaid
 sequenceDiagram
   participant B as Browser (createTts, edge engine, relayUrl)
-  participant R as App route (free-tts/server)
+  participant R as App route (anytts/server)
   participant M as Microsoft (wss, Edge UA ≥137)
   B->>B: mode auto: Edge ≥137 → direct, else relay
   B->>R: POST {text, voice}
@@ -164,7 +169,7 @@ sequenceDiagram
   B->>B: rebuild TtsError{kind} → same retry + cache rules
 ```
 
-- **Server** `free-tts/server`: `createRelayHandler({ maxChars = 2000, authorize?, edge? })` returns a
+- **Server** `anytts/server`: `createRelayHandler({ maxChars = 2000, authorize?, edge? })` returns a
   Fetch-standard `(Request) => Promise<Response>` (used as-is by a Next.js route handler) plus
   `toNodeHandler(handler)` for Express / `node:http`. Validation: unknown voice → `400 {kind:"unknown-voice"}`,
   text too long → `413`, `authorize` false → `403`, engine failure → `502 {kind}`. Stateless: cache
@@ -178,7 +183,7 @@ sequenceDiagram
 - **Deadlines over HTTP**: `firstByteMs` runs until the response headers, `stallMs` between body
   chunks; a fetch error is `network`.
 
-## free-tts/text
+## anytts/text
 
 - **Pronunciation maps** keyed by the **spoken language** of the voice: `applyPronunciation(text, lang, maps?)`.
   The library ships a `pl` preset = motyl's strict map (per-entry match mode; short keys no longer
@@ -198,13 +203,13 @@ sequenceDiagram
   including the regression "403 settles as `rejected` within the deadline; never hangs".
 - **Golden token vectors** generated with Python edge-tts 7.3.1 for fixed timestamps; checked in
   with the script that produced them.
-- `free-tts/text` tests ported from motyl (incl. the prose-survival fixture).
+- `anytts/text` tests ported from motyl (incl. the prose-survival fixture).
 - **Live contract test** (`pnpm test:live`): one short synthesis + voice list against Microsoft.
   Not part of PR CI; runs manually and in a nightly GitHub workflow, so the next token change shows
   up as a red nightly build.
 
 ## Distribution
 
-- Public repo `gmotyl/free-tts`, MIT, OpenSpec native in `openspec/`.
-- Entries: `free-tts`, `free-tts/text`, `free-tts/server`.
-- Published to npm as `free-tts` 0.1.0 from a tag-triggered workflow; consumers pin exact versions.
+- Public repo `gmotyl/anytts`, MIT, OpenSpec native in `openspec/`.
+- Entries: `anytts`, `anytts/text`, `anytts/server`.
+- Published to npm as `anytts` 0.1.0 from a tag-triggered workflow; consumers pin exact versions.

@@ -26,14 +26,14 @@ it("packed package imports in node 22", () => {
 
   // No runtime dependency comes along.
   const installed = readdirSync(join(dir, "node_modules")).filter((n) => !n.startsWith("."));
-  expect(installed).toEqual(["free-tts"]);
+  expect(installed).toEqual(["anytts"]);
 
   writeFileSync(
     join(dir, "check.mjs"),
     `
-import * as root from "free-tts";
-import * as text from "free-tts/text";
-import * as server from "free-tts/server";
+import * as root from "anytts";
+import * as text from "anytts/text";
+import * as server from "anytts/server";
 const kinds = (m) => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, typeof v]));
 console.log(JSON.stringify({ root: kinds(root), text: kinds(text), server: kinds(server), node: process.versions.node }));
 `,
@@ -65,9 +65,9 @@ console.log(JSON.stringify({ root: kinds(root), text: kinds(text), server: kinds
   writeFileSync(
     join(dir, "consumer.ts"),
     `
-import { createTts, TtsError, type Tts, type TtsConfig, type VoiceInfo } from "free-tts";
-import { packUnits, applyPronunciation, plPreset, type Unit } from "free-tts/text";
-import { createRelayHandler, toNodeHandler } from "free-tts/server";
+import { createTts, TtsError, type Tts, type TtsConfig, type VoiceInfo } from "anytts";
+import { packUnits, applyPronunciation, plPreset, type Unit } from "anytts/text";
+import { createRelayHandler, toNodeHandler } from "anytts/server";
 
 const config: TtsConfig = {} as TtsConfig;
 const tts: Tts = createTts(config);

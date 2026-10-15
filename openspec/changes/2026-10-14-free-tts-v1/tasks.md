@@ -1,10 +1,10 @@
-# free-tts v1 Implementation Plan
+# anytts v1 Implementation Plan
 
 > **For agentic workers:** implement this plan with [[pavilio-execute-plan]] — task-by-task, top-down; check off each step (`- [ ]` → `- [x]`) as it lands. Do one task fully (test → implement → verify → commit) before starting the next.
 
-**Goal:** Ship `free-tts@0.1.0` — Edge engine with its own client, cache, tiered scheduler, voice API and `free-tts/text` — usable from the browser and Node.
+**Goal:** Ship `anytts@0.1.0` — Edge engine with its own client, cache, tiered scheduler, voice API and `anytts/text` — usable from the browser and Node.
 
-**Architecture:** Core entry `free-tts` (`createTts` → cache → scheduler → engine → transport or Relay), an independent `free-tts/text` entry and a `free-tts/server` Relay handler for non-Edge browsers. Pure TypeScript, ESM-only, zero runtime dependencies; every network edge sits behind an injectable transport so the suite runs on fakes.
+**Architecture:** Core entry `anytts` (`createTts` → cache → scheduler → engine → transport or Relay), an independent `anytts/text` entry and a `anytts/server` Relay handler for non-Edge browsers. Pure TypeScript, ESM-only, zero runtime dependencies; every network edge sits behind an injectable transport so the suite runs on fakes.
 
 **Tech Stack:** TypeScript, pnpm, vitest (`node` + `jsdom` projects), `tsc` build, GitHub Actions, npm.
 
@@ -22,7 +22,7 @@
 **Contract:**
 ```jsonc
 // package.json (essentials)
-{ "name": "free-tts", "version": "0.0.0", "type": "module", "license": "MIT",
+{ "name": "anytts", "version": "0.0.0", "type": "module", "license": "MIT",
   "engines": { "node": ">=22" }, "sideEffects": false, "dependencies": {},
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
                "./text": { "types": "./dist/text/index.d.ts", "import": "./dist/text/index.js" },
@@ -34,7 +34,7 @@ vitest projects: `node` (`src/**/__tests__/*.test.ts`, environment node), `jsdom
 **Verification: non-testable** — Run: `pnpm install && pnpm lint && pnpm build && pnpm test` — Expected: build emits `dist/index.js` and `dist/text/index.js`; vitest exits 0 with no test files treated as passing (`--passWithNoTests`).
 
 - [x] **Step 1: Scaffold + verify** — commands above
-- [x] **Step 2: Commit** — `git add -A && git commit -m "chore: scaffold free-tts package"`
+- [x] **Step 2: Commit** — `git add -A && git commit -m "chore: scaffold anytts package"`
 
 ### Task 2: Typed errors
 
@@ -326,7 +326,7 @@ export function resolveVoice(tts: Tts, q: { engine: string; voice?: string; lang
 - [x] **Step 2: Minimal implementation** — same command — Expected: PASS
 - [x] **Step 3: Commit** — `git commit -am "feat: resolveVoice for settings UIs"`
 
-### Task 12: Relay handler (`free-tts/server`)
+### Task 12: Relay handler (`anytts/server`)
 
 **Files:**
 - Create: `src/server/index.ts` (`createRelayHandler`, `toNodeHandler`)
@@ -459,13 +459,13 @@ export function firstSentence(text: string): string | null;
 ### Task 16: Package entries are clean for Node and the browser
 
 **Files:**
-- Create: `test/package/consume.test.ts` (packs the tarball and imports it in a temp Node project), `test/package/vite-bundle.test.ts` (bundles `free-tts` and `free-tts/text` with Vite)
+- Create: `test/package/consume.test.ts` (packs the tarball and imports it in a temp Node project), `test/package/vite-bundle.test.ts` (bundles `anytts` and `anytts/text` with Vite)
 - Modify: `package.json` (`files`, devDependency `vite`)
 
 **Acceptance criteria:**
-- WHEN the packed tarball is installed in a temp Node 22 project THEN all three entries import with types and `node_modules` holds no runtime dependency of free-tts
-- WHEN Vite bundles an import of `free-tts` THEN the build succeeds without Node built-in polyfills and contains no `free-tts/server` code
-- WHEN Vite bundles only `free-tts/text` THEN the output contains no token, transport or engine code
+- WHEN the packed tarball is installed in a temp Node 22 project THEN all three entries import with types and `node_modules` holds no runtime dependency of anytts
+- WHEN Vite bundles an import of `anytts` THEN the build succeeds without Node built-in polyfills and contains no `anytts/server` code
+- WHEN Vite bundles only `anytts/text` THEN the output contains no token, transport or engine code
 
 **Tests (names only — red first):**
 - "packed package imports in node 22"
@@ -495,7 +495,7 @@ export function firstSentence(text: string): string | null;
 
 **Files:**
 - Create: `.github/workflows/ci.yml` (lint, build, `pnpm test` on PRs and `main`), `.github/workflows/release.yml` (on tag `v*`: test, build, `npm publish --provenance`)
-- Modify: `README.md` (install, `createTts` / `free-tts/text` examples, engine/voice settings flow)
+- Modify: `README.md` (install, `createTts` / `anytts/text` examples, engine/voice settings flow)
 
 **Verification: non-testable** — Run: `pnpm lint && pnpm build && pnpm test` locally; `actionlint` on both workflows if available — Expected: green, workflows valid.
 
@@ -505,11 +505,11 @@ export function firstSentence(text: string): string | null;
 ### Task 19: Publish 0.1.0 (user-gated)
 
 **Acceptance criteria:**
-- WHEN the user confirms THEN public repo `gmotyl/free-tts` exists, `main` is pushed, the `NPM_TOKEN` secret is set by the user, and tag `v0.1.0` publishes `free-tts@0.1.0`
-- WHEN `npm view free-tts version` runs THEN it prints `0.1.0`
+- WHEN the user confirms THEN public repo `gmotyl/anytts` exists, `main` is pushed, the `NPM_TOKEN` secret is set by the user, and tag `v0.1.0` publishes `anytts@0.1.0`
+- WHEN `npm view anytts version` runs THEN it prints `0.1.0`
 
-**Verification: non-testable** — Run: `npm view free-tts version` — Expected: `0.1.0`
+**Verification: non-testable** — Run: `npm view anytts version` — Expected: `0.1.0`
 
 - [ ] **Step 1: Ask the user to confirm creating the public repo and publishing** — outward-facing, never without a yes
-- [ ] **Step 2: `gh repo create gmotyl/free-tts --public --source . --push`; bump version to 0.1.0, tag, push tag**
+- [ ] **Step 2: `gh repo create gmotyl/anytts --public --source . --push`; bump version to 0.1.0, tag, push tag**
 - [ ] **Step 3: Confirm on npm and record the version in the workspace progress note**

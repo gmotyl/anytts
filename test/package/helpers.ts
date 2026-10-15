@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 /** A fresh temp project with only the packed tarball installed (via npm, no workspace links). */
 export function installPacked(tarball: string, prefix: string): string {
-  const dir = mkdtempSync(join(tmpdir(), `free-tts-${prefix}-`));
+  const dir = mkdtempSync(join(tmpdir(), `anytts-${prefix}-`));
   try {
     writeFileSync(
       join(dir, "package.json"),

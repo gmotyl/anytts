@@ -61,7 +61,7 @@ function expectNoNodeBuiltins({ code, warnings }: Bundle): void {
 }
 
 it("browser bundle needs no node built-ins and excludes the server", async () => {
-  const out = await bundle("main", `import * as tts from "free-tts";\nconsole.log(tts);\n`);
+  const out = await bundle("main", `import * as tts from "anytts";\nconsole.log(tts);\n`);
   expectNoNodeBuiltins(out);
   // Sanity: the engine is in (so the marker checks below are meaningful).
   expect(out.code).toContain("speech.platform.bing.com");
@@ -69,7 +69,7 @@ it("browser bundle needs no node built-ins and excludes the server", async () =>
 });
 
 it("text entry bundles without engine code", async () => {
-  const out = await bundle("text", `import * as text from "free-tts/text";\nconsole.log(text);\n`);
+  const out = await bundle("text", `import * as text from "anytts/text";\nconsole.log(text);\n`);
   expectNoNodeBuiltins(out);
   expect(out.code).toContain("packUnits");
   for (const marker of [...ENGINE_MARKERS, ...SERVER_MARKERS]) expect(out.code).not.toContain(marker);

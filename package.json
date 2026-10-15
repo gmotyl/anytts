@@ -1,7 +1,7 @@
 {
-  "name": "free-tts",
+  "name": "anytts",
   "version": "0.0.0",
-  "description": "Free text-to-speech for the browser and Node, built on the Edge read-aloud service.",
+  "description": "Text-to-speech for the browser and Node with pluggable engines — starting with the free Edge read-aloud service.",
   "type": "module",
   "license": "MIT",
   "author": "Greg Motyl",

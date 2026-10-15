@@ -14,7 +14,7 @@ export interface EdgeEngineOptions {
   transport?: Transport;
   /** Clock in milliseconds (Date.now-style). */
   now?: () => number;
-  /** Relay endpoint (`free-tts/server`) for browsers that cannot synthesize directly. */
+  /** Relay endpoint (`anytts/server`) for browsers that cannot synthesize directly. */
   relayUrl?: string;
   /** Default: `"auto"` when `relayUrl` is set, `"direct"` otherwise. Node is always direct. */
   mode?: "auto" | "direct" | "relay";
