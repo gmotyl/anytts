@@ -43,6 +43,14 @@ interface AttemptFailure {
   serverDateMs?: number;
 }
 
+/**
+ * `rejected` errors for a turn the service accepted and then closed with no audio.
+ * Public kind stays `rejected`; internally this is not a refused handshake, so it is
+ * retried once and never moves `auto` onto the relay for good.
+ */
+const droppedTurns = new WeakSet<TtsError>();
+const isDroppedTurn = (error: unknown): boolean => error instanceof TtsError && droppedTurns.has(error);
+
 const abortError = () => new DOMException("The operation was aborted.", "AbortError");
 
 function concat(chunks: Uint8Array[], total: number): ArrayBuffer {
@@ -129,7 +137,11 @@ export function createEdgeEngine(options: EdgeEngineOptions = {}): Engine {
       };
       // Before any audio, a refused handshake or a server-side close means "rejected".
       const failEarly = () => {
-        if (opened && total === 0) return fail(new TtsError("rejected", "server closed before any audio"));
+        if (opened && total === 0) {
+          const error = new TtsError("rejected", "server closed before any audio");
+          droppedTurns.add(error);
+          return fail(error);
+        }
         if (!opened && connectError && status === undefined) {
           return fail(new TtsError("network", "connect failed", { cause: connectError.cause }));
         }
@@ -167,7 +179,8 @@ export function createEdgeEngine(options: EdgeEngineOptions = {}): Engine {
           cleanup();
           return resolve(audio);
         }
-        // The service ends with an empty binary frame; it is not audio.
+        // Text frames (turn.start, response, audio.metadata word boundaries) are not audio.
+        // The service ends with an empty binary frame; it is not audio either.
         if (frame.kind !== "audio" || frame.headers.Path !== "audio" || frame.audio.length === 0) return;
         chunks.push(frame.audio.slice());
         total += frame.audio.length;
@@ -191,19 +204,30 @@ export function createEdgeEngine(options: EdgeEngineOptions = {}): Engine {
   }
 
   async function direct(text: string, voice: string, signal: AbortSignal): Promise<ArrayBuffer> {
-    try {
-      return await attempt(text, voice, signal);
-    } catch (failure) {
-      const { error, serverDateMs } = failure as AttemptFailure;
-      if (!(error instanceof TtsError) || error.kind !== "rejected" || serverDateMs === undefined) {
-        throw error;
-      }
-      // Clock skew: same remedy as edge-tts — adopt the server's clock and retry once.
-      skewSeconds += serverDateMs / 1000 - (now() / 1000 + skewSeconds);
+    let skewCorrected = false;
+    let dropRetried = false;
+    for (;;) {
       try {
         return await attempt(text, voice, signal);
-      } catch (second) {
-        throw (second as AttemptFailure).error;
+      } catch (failure) {
+        const { error, serverDateMs } = failure as AttemptFailure;
+        // A dropped turn: try once more on a fresh connection.
+        if (isDroppedTurn(error) && !dropRetried) {
+          dropRetried = true;
+          continue;
+        }
+        // Clock skew: same remedy as edge-tts — adopt the server's clock and retry once.
+        if (
+          !skewCorrected &&
+          error instanceof TtsError &&
+          error.kind === "rejected" &&
+          serverDateMs !== undefined
+        ) {
+          skewCorrected = true;
+          skewSeconds += serverDateMs / 1000 - (now() / 1000 + skewSeconds);
+          continue;
+        }
+        throw error;
       }
     }
   }
@@ -214,8 +238,9 @@ export function createEdgeEngine(options: EdgeEngineOptions = {}): Engine {
       return await direct(text, voice, signal);
     } catch (error) {
       if (mode !== "auto" || !(error instanceof TtsError) || error.kind !== "rejected") throw error;
-      // The service refuses this browser: stay on the relay for the rest of the instance's life.
-      useRelay = true;
+      // A dropped turn (already retried) says nothing about this browser: relay this call only.
+      // A refused handshake does: stay on the relay for the rest of the instance's life.
+      if (!isDroppedTurn(error)) useRelay = true;
       return relay(text, voice, signal);
     }
   }

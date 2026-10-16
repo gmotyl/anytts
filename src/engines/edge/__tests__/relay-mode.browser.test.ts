@@ -34,6 +34,14 @@ class FakeSocket {
     this.emit("message", { data: audioFrame(bytes) });
     this.emit("message", { data: TURN_END });
   }
+  /** The service accepts the handshake, then closes before any audio (a dropped turn). */
+  drop(): void {
+    this.readyState = 1;
+    this.emit("open");
+    this.emit("message", { data: "X-RequestId:abc\r\nPath:turn.start\r\n\r\n{}" });
+    this.readyState = 3;
+    this.emit("close");
+  }
   /** A refused handshake as a browser sees it: error then close, no status. */
   refuse(): void {
     this.readyState = 3;
@@ -123,7 +131,7 @@ describe("edge engine direct/relay mode (browser)", () => {
     expect(JSON.parse(init.body as string)).toEqual({ text: "Cześć", voice: VOICE });
   });
 
-  it("auto switches to relay after a direct rejection", async () => {
+  it("auto switches to relay for good after a refused handshake", async () => {
     setUserAgent(EDGE_UA);
     fetchMock.mockImplementation(async () => audioResponse([9]));
     const engine = engineWith();
@@ -135,6 +143,60 @@ describe("edge engine direct/relay mode (browser)", () => {
     const second = await engine.synthesize("two", VOICE, signal());
     expect(new Uint8Array(second)).toEqual(new Uint8Array([9]));
     expect(FakeSocket.instances).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("auto retries a dropped turn direct and stays direct", async () => {
+    setUserAgent(EDGE_UA);
+    const engine = engineWith();
+
+    const first = engine.synthesize("one", VOICE, signal());
+    FakeSocket.instances[0]!.drop();
+    await vi.waitFor(() => expect(FakeSocket.instances).toHaveLength(2));
+    FakeSocket.instances[1]!.speak([1]);
+    expect(new Uint8Array(await first)).toEqual(new Uint8Array([1]));
+
+    const second = engine.synthesize("two", VOICE, signal());
+    expect(FakeSocket.instances).toHaveLength(3);
+    FakeSocket.instances[2]!.speak([2]);
+    expect(new Uint8Array(await second)).toEqual(new Uint8Array([2]));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("auto uses the relay for one call after two dropped turns, then goes direct again", async () => {
+    setUserAgent(EDGE_UA);
+    fetchMock.mockImplementation(async () => audioResponse([9]));
+    const engine = engineWith();
+
+    const first = engine.synthesize("one", VOICE, signal());
+    FakeSocket.instances[0]!.drop();
+    await vi.waitFor(() => expect(FakeSocket.instances).toHaveLength(2));
+    FakeSocket.instances[1]!.drop();
+    expect(new Uint8Array(await first)).toEqual(new Uint8Array([9]));
+    // Exactly one retry: two sockets for the call, then the relay.
+    expect(FakeSocket.instances).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const second = engine.synthesize("two", VOICE, signal());
+    expect(FakeSocket.instances).toHaveLength(3);
+    FakeSocket.instances[2]!.speak([2]);
+    expect(new Uint8Array(await second)).toEqual(new Uint8Array([2]));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("auto switches to relay when the retry after a dropped turn is refused", async () => {
+    setUserAgent(EDGE_UA);
+    fetchMock.mockImplementation(async () => audioResponse([9]));
+    const engine = engineWith();
+
+    const first = engine.synthesize("one", VOICE, signal());
+    FakeSocket.instances[0]!.drop();
+    await vi.waitFor(() => expect(FakeSocket.instances).toHaveLength(2));
+    FakeSocket.instances[1]!.refuse();
+    expect(new Uint8Array(await first)).toEqual(new Uint8Array([9]));
+
+    await engine.synthesize("two", VOICE, signal());
+    expect(FakeSocket.instances).toHaveLength(2);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
