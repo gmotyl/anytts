@@ -84,5 +84,5 @@ export interface Tts {
 **Verification: non-testable** — Run: `npm view anytts version` — Expected: `0.2.0`
 
 - [x] **Step 1: Bump the version** — `git commit -am "chore: release 0.2.0"`; push the branch; `gh pr create --base main` with the proposal's summary
-- [ ] **Step 2: Ask the user to merge and tag** — outward-facing: never tag or publish without the user's go; after merge, `git tag v0.2.0 <merge sha> && git push origin v0.2.0` only when told
-- [ ] **Step 3: Confirm on npm and record the version** — Run: `npm view anytts version` — Expected: `0.2.0`; note it in the pavilio session progress file (pavilio PR 2 pins this exact version)
+- [x] **Step 2: Ask the user to merge and tag** — outward-facing: never tag or publish without the user's go; after merge, `git tag v0.2.0 <merge sha> && git push origin v0.2.0` only when told
+- [x] **Step 3: Confirm on npm and record the version** — Run: `npm view anytts version` — Expected: `0.2.0`; note it in the pavilio session progress file (pavilio PR 2 pins this exact version)
