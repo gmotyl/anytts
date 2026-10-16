@@ -15,7 +15,7 @@ word boundaries.
 - **THEN** the result holds only the audio bytes and resolves on `turn.end`
 
 ### Requirement: A dropped turn is retried once
-A *dropped turn* is an attempt whose socket opened and then closed before any audio. The engine
+A *dropped turn* is an attempt whose socket opened and then closed or errored before any audio. The engine
 retries it once on a fresh connection.
 
 #### Scenario: Retry succeeds

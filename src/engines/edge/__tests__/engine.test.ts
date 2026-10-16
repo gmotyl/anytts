@@ -268,6 +268,23 @@ describe("createEdgeEngine", () => {
     expect(socket.open).toBe(false);
   });
 
+  it("socket error after open with no audio is a dropped turn and retries once", async () => {
+    const { transport, opened } = fakeTransport();
+    const promise = settle(engineWith(transport).synthesize("x", VOICE, new AbortController().signal));
+    // Abnormal drop as browsers report it: error, then close (1006).
+    opened[0]!.socket.serverOpen();
+    opened[0]!.socket.serverError();
+    opened[0]!.socket.serverClose();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(opened).toHaveLength(2);
+    opened[1]!.socket.serverOpen();
+    opened[1]!.socket.serverError();
+    opened[1]!.socket.serverClose();
+    const { error } = await promise;
+    expectKind(error, "rejected");
+    expect(opened).toHaveLength(2);
+  });
+
   it("connect error without a response is network", async () => {
     const { transport, opened } = fakeTransport(({ socket, hooks }) => {
       // Mimics undici on ECONNREFUSED/DNS failure: no response, then an error event.

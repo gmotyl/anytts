@@ -187,7 +187,9 @@ export function createEdgeEngine(options: EdgeEngineOptions = {}): Engine {
         arm(stallMs, "stalled");
       }
       function onError() {
-        if (opened) return fail(new TtsError("network", "socket error"));
+        // Mid-audio it is a lost connection; before any audio (opened or not) classify like a close,
+        // so an abnormal drop after the handshake (error, then close 1006) is a dropped turn.
+        if (opened && total > 0) return fail(new TtsError("network", "socket error"));
         failEarly();
       }
       function onClose() {

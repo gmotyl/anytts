@@ -42,6 +42,14 @@ class FakeSocket {
     this.readyState = 3;
     this.emit("close");
   }
+  /** An abnormal drop after the handshake as a browser sees it: error, then close (1006), no audio. */
+  dropWithError(): void {
+    this.readyState = 1;
+    this.emit("open");
+    this.readyState = 3;
+    this.emit("error");
+    this.emit("close");
+  }
   /** A refused handshake as a browser sees it: error then close, no status. */
   refuse(): void {
     this.readyState = 3;
@@ -174,6 +182,26 @@ describe("edge engine direct/relay mode (browser)", () => {
     FakeSocket.instances[1]!.drop();
     expect(new Uint8Array(await first)).toEqual(new Uint8Array([9]));
     // Exactly one retry: two sockets for the call, then the relay.
+    expect(FakeSocket.instances).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const second = engine.synthesize("two", VOICE, signal());
+    expect(FakeSocket.instances).toHaveLength(3);
+    FakeSocket.instances[2]!.speak([2]);
+    expect(new Uint8Array(await second)).toEqual(new Uint8Array([2]));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("auto treats an error-then-close drop as a dropped turn: one retry, relay this call only", async () => {
+    setUserAgent(EDGE_UA);
+    fetchMock.mockImplementation(async () => audioResponse([9]));
+    const engine = engineWith();
+
+    const first = engine.synthesize("one", VOICE, signal());
+    FakeSocket.instances[0]!.dropWithError();
+    await vi.waitFor(() => expect(FakeSocket.instances).toHaveLength(2));
+    FakeSocket.instances[1]!.dropWithError();
+    expect(new Uint8Array(await first)).toEqual(new Uint8Array([9]));
     expect(FakeSocket.instances).toHaveLength(2);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
