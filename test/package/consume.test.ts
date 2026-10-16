@@ -65,7 +65,7 @@ console.log(JSON.stringify({ root: kinds(root), text: kinds(text), server: kinds
   writeFileSync(
     join(dir, "consumer.ts"),
     `
-import { createTts, TtsError, type Tts, type TtsConfig, type VoiceInfo } from "anytts";
+import { createTts, TtsError, type Tts, type TtsConfig, type TtsEvent, type VoiceInfo } from "anytts";
 import { packUnits, applyPronunciation, plPreset, type Unit } from "anytts/text";
 import { createRelayHandler, toNodeHandler } from "anytts/server";
 
@@ -76,7 +76,19 @@ const handler: (req: Request) => Promise<Response> = createRelayHandler();
 const nodeHandler = toNodeHandler(handler);
 const err: unknown = new TtsError("rejected", "x");
 const voices: VoiceInfo[] = [];
-export { tts, units, nodeHandler, err, voices, applyPronunciation, plPreset };
+const state: "cold" | "pending" | "ready" = tts.state({ text: "x" });
+const listener = (e: TtsEvent): void => {
+  const type: "pending" | "add" | "drop" | "evict" = e.type;
+  const key: string = e.key;
+  void type;
+  void key;
+};
+const unsubscribe: () => void = tts.subscribe(listener);
+// Reverse direction: the new literals must be assignable to TtsEvent, so a dist that
+// regressed to the old two-type union fails here rather than passing silently.
+const pending: TtsEvent = { type: "pending", key: "k" };
+const dropped: TtsEvent = { type: "drop", key: "k" };
+export { tts, units, nodeHandler, err, voices, state, unsubscribe, pending, dropped, applyPronunciation, plPreset };
 `,
   );
   writeFileSync(

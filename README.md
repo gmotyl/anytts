@@ -43,7 +43,7 @@ tts.prefetch({ text: "Następne zdanie.", lang: "pl", tier: "warm" });
 
 tts.isCached({ text: "Następne zdanie.", lang: "pl" }); // true once synthesized
 
-// Cache events: { type: "add" | "evict", key }.
+// Lifecycle events: { type: "pending" | "add" | "drop" | "evict", key }.
 const unsubscribe = tts.subscribe((e) => console.log(e.type, e.key));
 ```
 
@@ -52,6 +52,26 @@ wins over `lang`, and the tier defaults to the first one configured. Identical c
 requests share one synthesis; asking again on a higher tier promotes the queued job. An aborted
 `signal` rejects with an `AbortError`, and the job is cancelled once nobody is waiting for it.
 `bytes` is shared with the cache: do not detach or transfer it.
+
+### Observing a request
+
+`tts.state(req)` answers `"ready"` when the request's key is cached, `"pending"` while it is
+queued or running, and `"cold"` otherwise (including an unknown voice or engine, without
+throwing). `subscribe` listeners (type `TtsListener`, exported alongside `TtsEvent`) receive
+`{ type: "pending" | "add" | "drop" | "evict", key }`:
+`pending` when a request enters the in-flight map, `add` when its result is cached, `drop` when
+it leaves the map without a result (a final failure or abandonment), and `evict` when the LRU
+removes a cached result, as before. Joins and retries are silent: a second caller joining an
+in-flight key, a waiting job being promoted, or a transient failure being retried emits nothing.
+
+```ts
+const req = { text: "Trzecie zdanie.", lang: "pl" };
+tts.state(req); // "cold"
+const done = tts.synthesize(req);
+tts.state(req); // "pending" synchronously after the call (queued or already running)
+await done;
+tts.state(req); // "ready"; the listener above saw `pending` then `add`
+```
 
 ## Text helpers: `anytts/text`
 

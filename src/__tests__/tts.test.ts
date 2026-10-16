@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Engine, VoiceInfo } from "../engine.js";
 import { TtsError, type TtsErrorKind } from "../errors.js";
-import { createTts, type TtsConfig } from "../tts.js";
+import { createTts, type TtsConfig, type TtsEvent } from "../tts.js";
 
 const voice = (id: string): VoiceInfo => ({ id, label: id, locale: id.slice(0, 5), gender: "male", multilingual: false });
 
@@ -34,7 +34,7 @@ function fakeEngine(id = "edge") {
 const bytes = (...values: number[]) => new Uint8Array(values).buffer;
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-function setup(overrides: { retries?: number; concurrency?: number } = {}) {
+function setup(overrides: { retries?: number; concurrency?: number; cacheMax?: number } = {}) {
   const edge = fakeEngine("edge");
   const other = fakeEngine("other");
   const config: TtsConfig = {
@@ -47,6 +47,7 @@ function setup(overrides: { retries?: number; concurrency?: number } = {}) {
     },
     defaultEngine: "edge",
     scheduler: { concurrency: overrides.concurrency ?? 1, tiers: [{ name: "play" }, { name: "warm" }] },
+    ...(overrides.cacheMax !== undefined ? { cache: { max: overrides.cacheMax } } : {}),
   };
   const factories = { edge: () => edge.engine, other: () => other.engine };
   const tts = createTts(config, { engineFactories: factories });
@@ -364,5 +365,236 @@ describe("createTts", () => {
     expect(a.isCached({ text: "hello" })).toBe(true);
     expect(b.isCached({ text: "hello" })).toBe(false);
     expect(events).toEqual([]);
+  });
+
+  describe("in-flight state", () => {
+    const key = (text: string, engine = "edge", voice = "en-US-AndrewMultilingualNeural") =>
+      JSON.stringify([engine, voice, text]);
+    const record = (tts: ReturnType<typeof setup>["tts"]) => {
+      const events: TtsEvent[] = [];
+      const unsubscribe = tts.subscribe((e) => events.push(e));
+      return { events, unsubscribe };
+    };
+
+    it("state is pending from the call until the result lands, then ready", async () => {
+      const { tts, edge } = setup({ concurrency: 1 });
+      expect(tts.state({ text: "a" })).toBe("cold");
+      const result = tts.synthesize({ text: "a" });
+      // Synchronously after the call.
+      expect(tts.state({ text: "a" })).toBe("pending");
+      // prefetch takes the same path; with the only slot busy, "b" is pending before the engine is reached.
+      tts.prefetch({ text: "b" });
+      expect(tts.state({ text: "b" })).toBe("pending");
+      await flush();
+      expect(edge.calls.map((c) => c.text)).toEqual(["a"]);
+      expect(tts.state({ text: "a" })).toBe("pending");
+      expect(tts.state({ text: "b" })).toBe("pending");
+      edge.calls[0]!.resolve(bytes(1));
+      await result;
+      expect(tts.state({ text: "a" })).toBe("ready");
+      expect(tts.isCached({ text: "a" })).toBe(true);
+      await flush();
+      expect(edge.calls.map((c) => c.text)).toEqual(["a", "b"]);
+      expect(tts.state({ text: "b" })).toBe("pending");
+      edge.calls[1]!.resolve(bytes(2));
+      await flush();
+      expect(tts.state({ text: "b" })).toBe("ready");
+    });
+
+    it("state returns to cold and drop is emitted when the engine fails for good", async () => {
+      const { tts, edge } = setup({ retries: 0 });
+      const { events } = record(tts);
+      const result = tts.synthesize({ text: "a" });
+      expect(tts.state({ text: "a" })).toBe("pending");
+      await flush();
+      edge.calls[0]!.reject(fail("no-audio"));
+      await expect(result).rejects.toMatchObject({ kind: "no-audio" });
+      await flush();
+      expect(tts.state({ text: "a" })).toBe("cold");
+      expect(tts.isCached({ text: "a" })).toBe(false);
+      expect(events).toEqual([
+        { type: "pending", key: key("a") },
+        { type: "drop", key: key("a") },
+      ]);
+    });
+
+    it("state returns to cold and drop is emitted when a queued job is aborted", async () => {
+      const { tts, edge } = setup();
+      const { events } = record(tts);
+      const blocker = tts.synthesize({ text: "busy" });
+      const controller = new AbortController();
+      const queued = tts.synthesize({ text: "a", signal: controller.signal });
+      await flush();
+      expect(edge.calls.map((c) => c.text)).toEqual(["busy"]);
+      expect(tts.state({ text: "a" })).toBe("pending");
+      controller.abort();
+      expect(tts.state({ text: "a" })).toBe("cold");
+      await expect(queued).rejects.toMatchObject({ name: "AbortError" });
+      // Let the removed job's rejection run its release handler: no second drop.
+      edge.calls[0]!.resolve(bytes(1));
+      await blocker;
+      await flush();
+      expect(tts.isCached({ text: "a" })).toBe(false);
+      expect(events.filter((e) => e.key === key("a"))).toEqual([
+        { type: "pending", key: key("a") },
+        { type: "drop", key: key("a") },
+      ]);
+    });
+
+    it("drop is emitted once when a running job is aborted by its last caller", async () => {
+      const { tts, edge } = setup();
+      const { events } = record(tts);
+      const controller = new AbortController();
+      const running = tts.synthesize({ text: "a", signal: controller.signal });
+      await flush();
+      expect(edge.calls).toHaveLength(1);
+      controller.abort();
+      await expect(running).rejects.toMatchObject({ name: "AbortError" });
+      expect(edge.calls[0]!.signal.aborted).toBe(true);
+      await flush();
+      await flush();
+      expect(tts.state({ text: "a" })).toBe("cold");
+      expect(events).toEqual([
+        { type: "pending", key: key("a") },
+        { type: "drop", key: key("a") },
+      ]);
+    });
+
+    it("a success emits pending then add, once each", async () => {
+      const { tts, edge } = setup();
+      const { events } = record(tts);
+      const result = tts.synthesize({ text: "a" });
+      await flush();
+      edge.calls[0]!.resolve(bytes(1));
+      await result;
+      await flush();
+      expect(events).toEqual([
+        { type: "pending", key: key("a") },
+        { type: "add", key: key("a") },
+      ]);
+    });
+
+    it("a joining caller and a promotion emit nothing", async () => {
+      const { tts, edge } = setup();
+      const { events } = record(tts);
+      const busy = tts.synthesize({ text: "busy", tier: "play" });
+      const warm = tts.synthesize({ text: "a", tier: "warm" });
+      // Joins the queued job and promotes it to play.
+      const promoted = tts.synthesize({ text: "a", tier: "play" });
+      // Joins again without a tier change.
+      const joined = tts.synthesize({ text: "a", tier: "play" });
+      expect(events).toEqual([
+        { type: "pending", key: key("busy") },
+        { type: "pending", key: key("a") },
+      ]);
+      await flush();
+      edge.calls[0]!.resolve(bytes(1));
+      await busy;
+      await flush();
+      edge.calls[1]!.resolve(bytes(2));
+      await Promise.all([warm, promoted, joined]);
+      await flush();
+      expect(events.map((e) => e.type)).toEqual(["pending", "pending", "add", "add"]);
+    });
+
+    it("a retried transient failure emits nothing between attempts", async () => {
+      const { tts, edge } = setup({ retries: 1 });
+      const { events } = record(tts);
+      const result = tts.synthesize({ text: "a" });
+      await flush();
+      edge.calls[0]!.reject(fail("network"));
+      await flush();
+      expect(edge.calls).toHaveLength(2);
+      expect(tts.state({ text: "a" })).toBe("pending");
+      expect(events).toEqual([{ type: "pending", key: key("a") }]);
+      edge.calls[1]!.resolve(bytes(1));
+      await result;
+      expect(events).toEqual([
+        { type: "pending", key: key("a") },
+        { type: "add", key: key("a") },
+      ]);
+    });
+
+    it("state answers cold for an unknown voice without throwing", () => {
+      const { tts } = setup();
+      expect(() => tts.state({ text: "a", voice: "xx-XX-NobodyNeural" })).not.toThrow();
+      expect(tts.state({ text: "a", voice: "xx-XX-NobodyNeural" })).toBe("cold");
+      expect(() => tts.state({ text: "a", engine: "nope" })).not.toThrow();
+      expect(tts.state({ text: "a", engine: "nope" })).toBe("cold");
+    });
+
+    it("evict still reaches a tts subscriber when the cache overflows", async () => {
+      const { tts, edge } = setup({ cacheMax: 1 });
+      const { events } = record(tts);
+      const first = tts.synthesize({ text: "a" });
+      await flush();
+      edge.calls[0]!.resolve(bytes(1));
+      await first;
+      const second = tts.synthesize({ text: "b" });
+      await flush();
+      edge.calls[1]!.resolve(bytes(2));
+      await second;
+      await flush();
+      expect(events).toEqual([
+        { type: "pending", key: key("a") },
+        { type: "add", key: key("a") },
+        { type: "pending", key: key("b") },
+        { type: "add", key: key("b") },
+        { type: "evict", key: key("a") },
+      ]);
+      expect(tts.isCached({ text: "a" })).toBe(false);
+      expect(tts.state({ text: "a" })).toBe("cold");
+    });
+
+    it("unsubscribe silences both cache and in-flight events", async () => {
+      const { tts, edge } = setup({ retries: 0 });
+      const { events, unsubscribe } = record(tts);
+      const other: TtsEvent[] = [];
+      tts.subscribe((e) => other.push(e));
+      const first = tts.synthesize({ text: "a" });
+      await flush();
+      edge.calls[0]!.resolve(bytes(1));
+      await first;
+      expect(events.map((e) => e.type)).toEqual(["pending", "add"]);
+      unsubscribe();
+      const second = tts.synthesize({ text: "b" });
+      await flush();
+      edge.calls[1]!.resolve(bytes(2));
+      await second;
+      const failing = tts.synthesize({ text: "c" });
+      await flush();
+      edge.calls[2]!.reject(fail("no-audio"));
+      await expect(failing).rejects.toMatchObject({ kind: "no-audio" });
+      await flush();
+      expect(events.map((e) => e.type)).toEqual(["pending", "add"]);
+      // The other listener keeps receiving every kind of event.
+      expect(other.map((e) => e.type)).toEqual(["pending", "add", "pending", "add", "pending", "drop"]);
+    });
+
+    it("a listener that aborts the caller's signal on pending still gets AbortError", async () => {
+      const { tts, edge } = setup();
+      const { events } = record(tts);
+      const controller = new AbortController();
+      // Abort from inside the pending notification, before synthesize has registered its abort listener.
+      tts.subscribe((e) => {
+        if (e.type === "pending") controller.abort();
+      });
+      const result = tts.synthesize({ text: "a", signal: controller.signal });
+      // Attach the handler before yielding: a synchronous rejection must not be reported as unhandled.
+      const rejection = expect(result).rejects.toMatchObject({ name: "AbortError" });
+      await flush();
+      // Settle any engine call by hand: a correctly aborted call ignores this, a leaked one would resolve the caller.
+      edge.calls[0]?.resolve(bytes(1));
+      await rejection;
+      await flush();
+      expect(tts.state({ text: "a" })).toBe("cold");
+      expect(tts.isCached({ text: "a" })).toBe(false);
+      expect(events).toEqual([
+        { type: "pending", key: key("a") },
+        { type: "drop", key: key("a") },
+      ]);
+      // The free scheduler slot may have reached the engine synchronously; if so, its signal must be aborted.
+      if (edge.calls.length === 1) expect(edge.calls[0]!.signal.aborted).toBe(true);
+    });
   });
 });
