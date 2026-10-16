@@ -42,6 +42,18 @@ describe("edge wire protocol", () => {
     expect(config.context.synthesis.audio.outputFormat).toBe("audio-24khz-48kbitrate-mono-mp3");
   });
 
+  it("config message enables word boundaries and keeps sentence boundaries off", () => {
+    // As of 2026-10-16 the service drops about half the turns (opens, then closes with no audio)
+    // when word boundaries are off; with them on it answered every turn.
+    const config = JSON.parse(bodyOf(buildConfigMessage(DATE))) as {
+      context: { synthesis: { audio: { metadataoptions: Record<string, string> } } };
+    };
+    expect(config.context.synthesis.audio.metadataoptions).toEqual({
+      sentenceBoundaryEnabled: "false",
+      wordBoundaryEnabled: "true",
+    });
+  });
+
   it("ssml has only speak, voice and prosody", () => {
     const message = buildSsmlMessage({
       text: "Dzień dobry",
@@ -99,6 +111,14 @@ describe("edge wire protocol", () => {
       kind: "text",
       path: "turn.start",
     });
+  });
+
+  it("audio.metadata text frame parses as text, not audio", () => {
+    const frame =
+      "X-RequestId:abc\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n" +
+      '{"Metadata":[{"Type":"WordBoundary","Data":{"Offset":1000000,"Duration":3000000,' +
+      '"text":{"Text":"Hello","Length":5,"BoundaryType":"WordBoundary"}}}]}';
+    expect(parseFrame(frame)).toMatchObject({ kind: "text", path: "audio.metadata" });
   });
 });
 
