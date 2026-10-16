@@ -570,5 +570,31 @@ describe("createTts", () => {
       // The other listener keeps receiving every kind of event.
       expect(other.map((e) => e.type)).toEqual(["pending", "add", "pending", "add", "pending", "drop"]);
     });
+
+    it("a listener that aborts the caller's signal on pending still gets AbortError", async () => {
+      const { tts, edge } = setup();
+      const { events } = record(tts);
+      const controller = new AbortController();
+      // Abort from inside the pending notification, before synthesize has registered its abort listener.
+      tts.subscribe((e) => {
+        if (e.type === "pending") controller.abort();
+      });
+      const result = tts.synthesize({ text: "a", signal: controller.signal });
+      // Attach the handler before yielding: a synchronous rejection must not be reported as unhandled.
+      const rejection = expect(result).rejects.toMatchObject({ name: "AbortError" });
+      await flush();
+      // Settle any engine call by hand: a correctly aborted call ignores this, a leaked one would resolve the caller.
+      edge.calls[0]?.resolve(bytes(1));
+      await rejection;
+      await flush();
+      expect(tts.state({ text: "a" })).toBe("cold");
+      expect(tts.isCached({ text: "a" })).toBe(false);
+      expect(events).toEqual([
+        { type: "pending", key: key("a") },
+        { type: "drop", key: key("a") },
+      ]);
+      // The free scheduler slot may have reached the engine synchronously; if so, its signal must be aborted.
+      if (edge.calls.length === 1) expect(edge.calls[0]!.signal.aborted).toBe(true);
+    });
   });
 });

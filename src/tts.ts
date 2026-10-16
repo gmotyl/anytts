@@ -206,6 +206,11 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
         }
         rejectPromise(abortError());
       };
+      // A pending listener may have aborted the signal already; addEventListener would never replay that.
+      if (signal?.aborted) {
+        onAbort();
+        return;
+      }
       signal?.addEventListener("abort", onAbort, { once: true });
       joined.job.done.then(
         (result) => {
