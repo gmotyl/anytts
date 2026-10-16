@@ -152,7 +152,9 @@ const tts = createTts({
       voices: { default: "en-US-AvaMultilingualNeural" },
       relayUrl: "/api/tts",
       // mode "auto" (the default when relayUrl is set): direct in Edge, relay elsewhere, and
-      // switch to the relay for good if the service rejects this browser.
+      // switch to the relay for good if the service refuses this browser's handshake. A turn
+      // the service accepts and then drops with no audio is retried direct once, then relayed
+      // for that call only.
       // "direct" or "relay" forces one path.
     },
   },

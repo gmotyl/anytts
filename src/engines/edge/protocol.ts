@@ -1,7 +1,11 @@
 /**
  * Edge read-aloud wire protocol: the two text messages a turn sends
  * (`speech.config`, then `ssml`) and parsing of the frames it receives.
- * Ported from rany2/edge-tts 7.3.1 `communicate.py`.
+ * Ported from rany2/edge-tts 7.3.1 `communicate.py`, with one deviation: word
+ * boundaries are enabled (edge-tts turns them off). As of 2026-10-16 the service
+ * accepts the turn, then closes with no audio on about half the turns when word
+ * boundaries are off; with them on it answered every turn. The resulting
+ * `Path:audio.metadata` text frames are not audio and the engine skips them.
  *
  * The endpoint accepts only `speak` > `voice` > `prosody`: `<lang>`, `<break>`,
  * `mstts:*` and `xml:lang` on inner elements all yield no audio.
@@ -59,7 +63,8 @@ export function buildConfigMessage(date: Date = new Date()): string {
     context: {
       synthesis: {
         audio: {
-          metadataoptions: { sentenceBoundaryEnabled: "false", wordBoundaryEnabled: "false" },
+          // wordBoundaryEnabled must stay "true": see the module comment.
+          metadataoptions: { sentenceBoundaryEnabled: "false", wordBoundaryEnabled: "true" },
           outputFormat: OUTPUT_FORMAT,
         },
       },

@@ -85,6 +85,20 @@ function audioFrame(bytes: number[]): ArrayBuffer {
   return out.buffer;
 }
 
+function metadataFrame(word: string, offset: number): string {
+  return (
+    "X-RequestId:abc\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n" +
+    JSON.stringify({
+      Metadata: [
+        {
+          Type: "WordBoundary",
+          Data: { Offset: offset, Duration: 3000000, text: { Text: word, Length: word.length, BoundaryType: "WordBoundary" } },
+        },
+      ],
+    })
+  );
+}
+
 const TURN_END = "X-RequestId:abc\r\nPath:turn.end\r\n\r\n{}";
 const NOW = Date.UTC(2026, 9, 14, 12, 0, 0);
 const VOICE = "pl-PL-MarekNeural";
@@ -157,14 +171,51 @@ describe("createEdgeEngine", () => {
     expect(opened[0]!.socket.listenerCount).toBe(0);
   });
 
-  it("close before audio is rejected", async () => {
+  it("word-boundary metadata frames between audio frames are not audio", async () => {
+    const { transport, opened } = fakeTransport();
+    const promise = engineWith(transport).synthesize("Hello world", VOICE, new AbortController().signal);
+    const { socket } = opened[0]!;
+    socket.serverOpen();
+    socket.serverSend("X-RequestId:abc\r\nPath:turn.start\r\n\r\n{}");
+    socket.serverSend("X-RequestId:abc\r\nPath:response\r\n\r\n{}");
+    socket.serverSend(metadataFrame("Hello", 1000000));
+    socket.serverSend(audioFrame([1, 2]));
+    socket.serverSend(metadataFrame("world", 5000000));
+    socket.serverSend(audioFrame([3]));
+    socket.serverSend(TURN_END);
+
+    const { value, error } = await settle(promise);
+    expect(error).toBeUndefined();
+    expect(Array.from(new Uint8Array(value!))).toEqual([1, 2, 3]);
+    expect(opened).toHaveLength(1);
+  });
+
+  it("close after open with no audio retries once on a fresh connection", async () => {
     const { transport, opened } = fakeTransport();
     const promise = settle(engineWith(transport).synthesize("x", VOICE, new AbortController().signal));
     opened[0]!.socket.serverOpen();
     opened[0]!.socket.serverClose();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(opened).toHaveLength(2);
+    const { socket } = opened[1]!;
+    socket.serverOpen();
+    socket.serverSend(audioFrame([7]));
+    socket.serverSend(TURN_END);
+    const { value } = await promise;
+    expect(Array.from(new Uint8Array(value!))).toEqual([7]);
+  });
+
+  it("close before audio twice is rejected after one retry", async () => {
+    const { transport, opened } = fakeTransport();
+    const promise = settle(engineWith(transport).synthesize("x", VOICE, new AbortController().signal));
+    opened[0]!.socket.serverOpen();
+    opened[0]!.socket.serverClose();
+    await vi.advanceTimersByTimeAsync(0);
+    opened[1]!.socket.serverOpen();
+    opened[1]!.socket.serverClose();
     const { error } = await promise;
     expectKind(error, "rejected");
-    expect(opened).toHaveLength(1);
+    expect(opened).toHaveLength(2);
   });
 
   it("no first byte times out and closes the socket", async () => {
@@ -215,6 +266,23 @@ describe("createEdgeEngine", () => {
     const { error } = await promise;
     expectKind(error, "network");
     expect(socket.open).toBe(false);
+  });
+
+  it("socket error after open with no audio is a dropped turn and retries once", async () => {
+    const { transport, opened } = fakeTransport();
+    const promise = settle(engineWith(transport).synthesize("x", VOICE, new AbortController().signal));
+    // Abnormal drop as browsers report it: error, then close (1006).
+    opened[0]!.socket.serverOpen();
+    opened[0]!.socket.serverError();
+    opened[0]!.socket.serverClose();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(opened).toHaveLength(2);
+    opened[1]!.socket.serverOpen();
+    opened[1]!.socket.serverError();
+    opened[1]!.socket.serverClose();
+    const { error } = await promise;
+    expectKind(error, "rejected");
+    expect(opened).toHaveLength(2);
   });
 
   it("connect error without a response is network", async () => {
