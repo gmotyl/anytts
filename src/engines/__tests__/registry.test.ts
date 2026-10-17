@@ -60,6 +60,28 @@ describe("registry", () => {
     });
     expect(voices.find((voice) => voice.id === "pl-PL-ZofiaNeural")?.gender).toBe("female");
 
+    // Single-language English voices, grouped by locale after the multilingual ones.
+    const english = [
+      ["en-US-AriaNeural", "female"],
+      ["en-US-JennyNeural", "female"],
+      ["en-US-GuyNeural", "male"],
+      ["en-US-ChristopherNeural", "male"],
+      ["en-GB-SoniaNeural", "female"],
+      ["en-GB-RyanNeural", "male"],
+      ["en-GB-LibbyNeural", "female"],
+    ] as const;
+    for (const [id, gender] of english) {
+      expect(voices.find((voice) => voice.id === id)).toMatchObject({ gender, multilingual: false });
+    }
+    const firstSingle = voices.findIndex((voice) => !voice.multilingual);
+    expect(voices.slice(firstSingle).every((voice) => !voice.multilingual)).toBe(true);
+    expect(voices.slice(firstSingle).map((voice) => voice.locale)).toEqual([
+      ...Array(4).fill("en-US"),
+      ...Array(3).fill("en-GB"),
+      "pl-PL",
+      "pl-PL",
+    ]);
+
     // The engine speaks exactly the catalog it is listed with.
     expect(createEdgeEngine().voices).toEqual(voices);
   });
