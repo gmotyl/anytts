@@ -55,8 +55,9 @@ nobody is waiting for it. `bytes` is shared with the cache: do not detach or tra
 
 `onStart` fires when the job leaves the queue and `onFirstByte` when the first audio chunk
 arrives, each at most once per caller and always in that order, however many retries the job
-takes. A caller that joins a running job or hits the cache still hears both, in a microtask after
-`synthesize` returns; an aborted caller hears nothing more, and a throwing hook is ignored.
+takes. A caller that joins a running job hears the phases the job already passed in a microtask
+after `synthesize` returns, and later ones as they happen; a cache hit hears both in that
+microtask. An aborted caller hears nothing more, and a throwing hook is ignored.
 `prefetch` forwards them too.
 
 ```ts
@@ -81,6 +82,13 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") tts.restartStalled();
 });
 ```
+
+### How engines report the first byte
+
+Built-in engines receive an `EngineHooks` object (exported as a type) with each call and report
+the first audio chunk through `hooks.onFirstByte()`; the Edge engine does so direct or through
+the relay. That signal drives the request's `onFirstByte` and tells `restartStalled` an attempt
+is streaming: until it fires, the attempt counts as silent and can be restarted.
 
 ### Observing a request
 
@@ -192,28 +200,19 @@ const tts = createTts({
 });
 ```
 
-### Engine hooks
-
-Engines report progress through `EngineHooks` (exported as a type), passed as the fourth
-argument of `Engine.synthesize(text, voice, signal, hooks?)`. The built-in Edge engine calls
-`hooks.onFirstByte()` on the first audio chunk, direct or through the relay; that is what drives
-the request's `onFirstByte` and tells `restartStalled` an attempt is streaming. Hooks are
-optional: an engine that never calls `onFirstByte` still works, but its attempts look silent and
-stay restartable even while audio is flowing.
-
 ## Errors
 
 Engine failures reject with `TtsError`, which carries a `kind` (and an HTTP `status` when one
 is known):
 
-| `kind`               | Meaning                                              | Transient |
-| -------------------- | ---------------------------------------------------- | --------- |
-| `rejected`           | The service refused the request or the handshake     | no        |
-| `first-byte-timeout` | No audio arrived within the first-byte deadline      | yes       |
-| `stalled`            | Audio started, then the stream stopped mid-way       | yes       |
-| `network`            | Connection failed, dropped or sent malformed data    | yes       |
-| `no-audio`           | The request finished without any audio               | no        |
-| `unknown-voice`      | The voice is not in the engine's catalog             | no        |
+| `kind`               | Meaning                                                                                           | Transient |
+| -------------------- | ------------------------------------------------------------------------------------------------- | --------- |
+| `rejected`           | The service refused the request or the handshake                                                  | no        |
+| `first-byte-timeout` | No audio arrived within the first-byte deadline, or `restartStalled()` restarted the last attempt | yes       |
+| `stalled`            | Audio started, then the stream stopped mid-way                                                    | yes       |
+| `network`            | Connection failed, dropped or sent malformed data                                                 | yes       |
+| `no-audio`           | The request finished without any audio                                                            | no        |
+| `unknown-voice`      | The voice is not in the engine's catalog                                                          | no        |
 
 Transient kinds are retried automatically (`retries` per engine, default 1) and can be checked
 with `isTransient(kind)`; the rest are final, so show them to the user rather than retrying.
