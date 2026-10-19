@@ -1,4 +1,4 @@
-import type { Engine } from "../../engine.js";
+import type { Engine, EngineHooks } from "../../engine.js";
 import { TtsError } from "../../errors.js";
 import { buildConfigMessage, buildSsmlMessage, newRequestId, parseFrame } from "./protocol.js";
 import { relaySynthesize } from "./relayClient.js";
@@ -68,12 +68,12 @@ export function createEdgeEngine(options: EdgeEngineOptions = {}): Engine {
   const mode = isNodeRuntime() ? "direct" : (options.mode ?? (relayUrl ? "auto" : "direct"));
   if (mode !== "direct" && !relayUrl) throw new RangeError(`edge mode "${mode}" needs a relayUrl`);
   let useRelay = mode === "relay" || (mode === "auto" && !isEdgeBrowser());
-  const relay = (text: string, voice: string, signal: AbortSignal) =>
-    relaySynthesize({ url: relayUrl!, firstByteMs, stallMs }, text, voice, signal);
+  const relay = (text: string, voice: string, signal: AbortSignal, hooks: EngineHooks) =>
+    relaySynthesize({ url: relayUrl!, firstByteMs, stallMs }, text, voice, signal, hooks);
   // Server clock minus local clock, learned from a rejected handshake's Date header.
   let skewSeconds = 0;
 
-  function attempt(text: string, voice: string, signal: AbortSignal): Promise<ArrayBuffer> {
+  function attempt(text: string, voice: string, signal: AbortSignal, hooks: EngineHooks): Promise<ArrayBuffer> {
     return new Promise((resolve, reject: (failure: AttemptFailure) => void) => {
       if (signal.aborted) return reject({ error: abortError() });
 
@@ -182,9 +182,11 @@ export function createEdgeEngine(options: EdgeEngineOptions = {}): Engine {
         // Text frames (turn.start, response, audio.metadata word boundaries) are not audio.
         // The service ends with an empty binary frame; it is not audio either.
         if (frame.kind !== "audio" || frame.headers.Path !== "audio" || frame.audio.length === 0) return;
+        const first = total === 0;
         chunks.push(frame.audio.slice());
         total += frame.audio.length;
         arm(stallMs, "stalled");
+        if (first) hooks.onFirstByte?.();
       }
       function onError() {
         // Mid-audio it is a lost connection; before any audio (opened or not) classify like a close,
@@ -205,12 +207,12 @@ export function createEdgeEngine(options: EdgeEngineOptions = {}): Engine {
     });
   }
 
-  async function direct(text: string, voice: string, signal: AbortSignal): Promise<ArrayBuffer> {
+  async function direct(text: string, voice: string, signal: AbortSignal, hooks: EngineHooks): Promise<ArrayBuffer> {
     let skewCorrected = false;
     let dropRetried = false;
     for (;;) {
       try {
-        return await attempt(text, voice, signal);
+        return await attempt(text, voice, signal, hooks);
       } catch (failure) {
         const { error, serverDateMs } = failure as AttemptFailure;
         // A dropped turn: try once more on a fresh connection.
@@ -234,16 +236,34 @@ export function createEdgeEngine(options: EdgeEngineOptions = {}): Engine {
     }
   }
 
-  async function synthesize(text: string, voice: string, signal: AbortSignal): Promise<ArrayBuffer> {
-    if (useRelay) return relay(text, voice, signal);
+  async function synthesize(
+    text: string,
+    voice: string,
+    signal: AbortSignal,
+    hooks?: EngineHooks,
+  ): Promise<ArrayBuffer> {
+    // Retries and the relay fallback share one guard: the caller hears about the first byte once.
+    let firstByteSeen = false;
+    const once: EngineHooks = {
+      onFirstByte() {
+        if (firstByteSeen) return;
+        firstByteSeen = true;
+        try {
+          hooks?.onFirstByte?.();
+        } catch {
+          // A failing observer must not fail the synthesis.
+        }
+      },
+    };
+    if (useRelay) return relay(text, voice, signal, once);
     try {
-      return await direct(text, voice, signal);
+      return await direct(text, voice, signal, once);
     } catch (error) {
       if (mode !== "auto" || !(error instanceof TtsError) || error.kind !== "rejected") throw error;
       // A dropped turn (already retried) says nothing about this browser: relay this call only.
       // A refused handshake does: stay on the relay for the rest of the instance's life.
       if (!isDroppedTurn(error)) useRelay = true;
-      return relay(text, voice, signal);
+      return relay(text, voice, signal, once);
     }
   }
 

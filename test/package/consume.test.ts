@@ -65,7 +65,7 @@ console.log(JSON.stringify({ root: kinds(root), text: kinds(text), server: kinds
   writeFileSync(
     join(dir, "consumer.ts"),
     `
-import { createTts, TtsError, type Tts, type TtsConfig, type TtsEvent, type VoiceInfo } from "anytts";
+import { createTts, TtsError, type Tts, type TtsConfig, type TtsEvent, type VoiceInfo, type EngineHooks } from "anytts";
 import { packUnits, applyPronunciation, plPreset, type Unit } from "anytts/text";
 import { createRelayHandler, toNodeHandler } from "anytts/server";
 
@@ -76,6 +76,7 @@ const handler: (req: Request) => Promise<Response> = createRelayHandler();
 const nodeHandler = toNodeHandler(handler);
 const err: unknown = new TtsError("rejected", "x");
 const voices: VoiceInfo[] = [];
+const hooks: EngineHooks = { onFirstByte: () => {} };
 const state: "cold" | "pending" | "ready" = tts.state({ text: "x" });
 const listener = (e: TtsEvent): void => {
   const type: "pending" | "add" | "drop" | "evict" = e.type;
@@ -88,7 +89,7 @@ const unsubscribe: () => void = tts.subscribe(listener);
 // regressed to the old two-type union fails here rather than passing silently.
 const pending: TtsEvent = { type: "pending", key: "k" };
 const dropped: TtsEvent = { type: "drop", key: "k" };
-export { tts, units, nodeHandler, err, voices, state, unsubscribe, pending, dropped, applyPronunciation, plPreset };
+export { tts, units, nodeHandler, err, voices, hooks, state, unsubscribe, pending, dropped, applyPronunciation, plPreset };
 `,
   );
   writeFileSync(
