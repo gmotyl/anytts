@@ -113,9 +113,9 @@ interface Tts { /* existing */ restartStalled(): boolean }
 - "a caller abort during a restarted attempt yields AbortError"
 - "a second restartStalled before the retry starts is a no-op"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm test` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -m "feat(tts): restartStalled expires a silent attempt into its retry"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm test` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -m "feat(tts): restartStalled expires a silent attempt into its retry"`
 
 ---
 
