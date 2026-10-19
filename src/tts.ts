@@ -12,6 +12,13 @@ export interface SynthesisRequest {
   engine?: string;
   tier?: string;
   signal?: AbortSignal;
+  /**
+   * Called once when the job leaves the queue; for a cache hit or a flight that already started,
+   * asynchronously after `synthesize` returns. A throwing hook is ignored.
+   */
+  onStart?(): void;
+  /** Called once when the first audio chunk arrives (on any attempt), after `onStart`; same timing rules. */
+  onFirstByte?(): void;
 }
 
 export interface SynthesisResult {
@@ -77,11 +84,63 @@ interface Resolved {
   key: string;
 }
 
+/** One caller's hooks and which of them it has already heard. */
+interface Listener {
+  req: SynthesisRequest;
+  started: boolean;
+  firstByte: boolean;
+}
+
+/** Phases a flight has reached, shared by every attempt, and the callers still listening. */
+interface Phases {
+  started: boolean;
+  firstByte: boolean;
+  listeners: Set<Listener>;
+}
+
 interface InFlight {
   job: ScheduledJob<SynthesisResult>;
   controller: AbortController;
   callers: number;
+  phases: Phases;
 }
+
+const newPhases = (): Phases => ({ started: false, firstByte: false, listeners: new Set() });
+
+/** Brings `listener` up to the phases reached so far, in order; a removed (aborted) listener hears nothing. */
+const notify = (phases: Phases, listener: Listener): void => {
+  if (phases.started && !listener.started && phases.listeners.has(listener)) {
+    listener.started = true;
+    try {
+      listener.req.onStart?.();
+    } catch {
+      // A faulty hook must not fail the synthesis.
+    }
+  }
+  if (phases.firstByte && !listener.firstByte && phases.listeners.has(listener)) {
+    listener.firstByte = true;
+    try {
+      listener.req.onFirstByte?.();
+    } catch {
+      // ignored
+    }
+  }
+};
+
+/** Marks `phase` reached once per flight (a retry does not re-fire it) and tells every listener. */
+const reach = (phases: Phases, phase: "started" | "firstByte"): void => {
+  if (phases[phase]) return;
+  phases[phase] = true;
+  for (const listener of [...phases.listeners]) notify(phases, listener);
+};
+
+/** Registers a caller; phases already passed are delivered in a microtask, after `synthesize` returns. */
+const listen = (phases: Phases, req: SynthesisRequest): Listener => {
+  const listener: Listener = { req, started: false, firstByte: false };
+  phases.listeners.add(listener);
+  if (phases.started) queueMicrotask(() => notify(phases, listener));
+  return listener;
+};
 
 export function createTts(config: TtsConfig, internals: CreateTtsInternals = {}): Tts {
   const factories = { ...BUILTIN_ENGINES, ...internals.engineFactories };
@@ -141,10 +200,11 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     };
   };
 
-  const attempt = async (r: Resolved, text: string, signal: AbortSignal): Promise<SynthesisResult> => {
+  const attempt = async (r: Resolved, text: string, signal: AbortSignal, phases: Phases): Promise<SynthesisResult> => {
+    const hooks = { onFirstByte: () => reach(phases, "firstByte") };
     for (let tries = 0; ; tries++) {
       try {
-        const bytes = await r.engine.synthesize(text, r.voice, signal);
+        const bytes = await r.engine.synthesize(text, r.voice, signal, hooks);
         return { bytes, mime: "audio/mpeg", engine: r.engineId, voice: r.voice };
       } catch (error) {
         const retry = error instanceof TtsError && isTransient(error.kind) && tries < r.retries && !signal.aborted;
@@ -155,13 +215,16 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
 
   const start = (r: Resolved, text: string, tier: string): InFlight => {
     const controller = new AbortController();
+    // Created before enqueue: a free slot may run the job synchronously.
+    const phases = newPhases();
     const job = scheduler.enqueue(tier, async () => {
-      const result = await attempt(r, text, controller.signal);
+      reach(phases, "started");
+      const result = await attempt(r, text, controller.signal, phases);
       // Only a job still owned by callers stores its result.
       if (!controller.signal.aborted) cache.set(r.key, result);
       return result;
     });
-    const flight: InFlight = { job, controller, callers: 0 };
+    const flight: InFlight = { job, controller, callers: 0, phases };
     inFlight.set(r.key, flight);
     emit({ type: "pending", key: r.key });
     const release = () => settle(r.key, flight);
@@ -179,7 +242,15 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     const { signal } = req;
     if (signal?.aborted) return Promise.reject(abortError());
     const hit = cache.get(r.key);
-    if (hit) return Promise.resolve({ ...hit });
+    if (hit) {
+      // A cache hit has passed both phases; the caller still hears them, unless it aborts first.
+      const listener: Listener = { req, started: false, firstByte: false };
+      const phases: Phases = { started: true, firstByte: true, listeners: new Set([listener]) };
+      queueMicrotask(() => {
+        if (!signal?.aborted) notify(phases, listener);
+      });
+      return Promise.resolve({ ...hit });
+    }
 
     const tier = req.tier ?? defaultTier ?? "";
     let flight = inFlight.get(r.key);
@@ -192,12 +263,14 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     }
     flight.callers++;
     const joined = flight;
+    const listener = listen(joined.phases, req);
 
     return new Promise<SynthesisResult>((resolvePromise, rejectPromise) => {
       let settled = false;
       const onAbort = () => {
         if (settled) return;
         settled = true;
+        joined.phases.listeners.delete(listener);
         joined.callers--;
         if (joined.callers === 0) {
           // Nobody is waiting any more: drop the queued job or stop the running one.

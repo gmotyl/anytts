@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Engine, VoiceInfo } from "../engine.js";
+import type { Engine, EngineHooks, VoiceInfo } from "../engine.js";
 import { TtsError, type TtsErrorKind } from "../errors.js";
 import { createTts, type TtsConfig, type TtsEvent } from "../tts.js";
 
@@ -11,6 +11,8 @@ interface Call {
   text: string;
   voice: string;
   signal: AbortSignal;
+  /** Reports the first audio chunk through the hooks the engine was given. */
+  firstByte: () => void;
   resolve: (bytes: ArrayBuffer) => void;
   reject: (error: unknown) => void;
 }
@@ -21,9 +23,9 @@ function fakeEngine(id = "edge") {
   const engine: Engine = {
     id,
     voices: VOICES,
-    synthesize(text, voiceId, signal) {
+    synthesize(text, voiceId, signal, hooks?: EngineHooks) {
       return new Promise<ArrayBuffer>((resolve, reject) => {
-        calls.push({ text, voice: voiceId, signal, resolve, reject });
+        calls.push({ text, voice: voiceId, signal, firstByte: () => hooks?.onFirstByte?.(), resolve, reject });
         signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
       });
     },
@@ -595,6 +597,181 @@ describe("createTts", () => {
       ]);
       // The free scheduler slot may have reached the engine synchronously; if so, its signal must be aborted.
       if (edge.calls.length === 1) expect(edge.calls[0]!.signal.aborted).toBe(true);
+    });
+  });
+  describe("phase hooks", () => {
+    /** Hooks that log their phase, tagged so several callers can share one log. */
+    const phases = (log: string[], tag = "") => ({
+      onStart: () => log.push(`${tag}start`),
+      onFirstByte: () => log.push(`${tag}firstByte`),
+    });
+
+    it("onStart fires when the job leaves the queue, onFirstByte on the first chunk", async () => {
+      const { tts, edge } = setup({ concurrency: 1 });
+      const blocker = tts.synthesize({ text: "blocker" });
+      const log: string[] = [];
+      const result = tts.synthesize({ text: "a", ...phases(log) });
+      await flush();
+      // Still queued behind the blocker.
+      expect(edge.calls).toHaveLength(1);
+      expect(log).toEqual([]);
+      edge.calls[0]!.resolve(bytes(1));
+      await blocker;
+      await flush();
+      expect(edge.calls).toHaveLength(2);
+      expect(log).toEqual(["start"]);
+      edge.calls[1]!.firstByte();
+      expect(log).toEqual(["start", "firstByte"]);
+      edge.calls[1]!.firstByte();
+      edge.calls[1]!.resolve(bytes(2));
+      await result;
+      await flush();
+      expect(log).toEqual(["start", "firstByte"]);
+    });
+
+    it("a late joiner gets passed phases asynchronously", async () => {
+      const { tts, edge } = setup({ concurrency: 2 });
+      const first = tts.synthesize({ text: "a" });
+      await flush();
+      edge.calls[0]!.firstByte();
+
+      const log: string[] = [];
+      const joined = tts.synthesize({ text: "a", ...phases(log) });
+      expect(log).toEqual([]);
+      await Promise.resolve();
+      expect(log).toEqual(["start", "firstByte"]);
+
+      // A joiner past only the start learns it late and the first byte live.
+      const startedLog: string[] = [];
+      const second = tts.synthesize({ text: "b" });
+      await flush();
+      const started = tts.synthesize({ text: "b", ...phases(startedLog) });
+      expect(startedLog).toEqual([]);
+      await Promise.resolve();
+      expect(startedLog).toEqual(["start"]);
+
+      edge.calls[1]!.firstByte();
+      expect(startedLog).toEqual(["start", "firstByte"]);
+      edge.calls[0]!.resolve(bytes(1));
+      edge.calls[1]!.resolve(bytes(2));
+      await Promise.all([first, joined, second, started]);
+      expect(log).toEqual(["start", "firstByte"]);
+    });
+
+    it("a cache hit fires both hooks", async () => {
+      const { tts, edge } = setup();
+      const warm = tts.synthesize({ text: "a" });
+      await flush();
+      edge.calls[0]!.resolve(bytes(7));
+      await warm;
+
+      const log: string[] = [];
+      const hit = tts.synthesize({ text: "a", ...phases(log) });
+      expect(log).toEqual([]);
+      const result = await hit;
+      expect(log).toEqual(["start", "firstByte"]);
+      expect(new Uint8Array(result.bytes)).toEqual(new Uint8Array([7]));
+      expect(edge.calls).toHaveLength(1);
+    });
+
+    it("a retry does not re-fire hooks", async () => {
+      const { tts, edge } = setup({ retries: 1 });
+      const log: string[] = [];
+      const result = tts.synthesize({ text: "a", ...phases(log) });
+      await flush();
+      edge.calls[0]!.firstByte();
+      edge.calls[0]!.reject(fail("network"));
+      await flush();
+      expect(edge.calls).toHaveLength(2);
+      edge.calls[1]!.firstByte();
+      edge.calls[1]!.resolve(bytes(1));
+      await result;
+      expect(log).toEqual(["start", "firstByte"]);
+    });
+
+    it("a throwing hook does not fail the synthesis", async () => {
+      const { tts, edge } = setup();
+      const thrower = {
+        onStart: () => {
+          throw new Error("start hook");
+        },
+        onFirstByte: () => {
+          throw new Error("first-byte hook");
+        },
+      };
+      const log: string[] = [];
+      const live = tts.synthesize({ text: "a", ...thrower });
+      const other = tts.synthesize({ text: "a", ...phases(log) });
+      await flush();
+      edge.calls[0]!.firstByte();
+      const late = tts.synthesize({ text: "a", ...thrower });
+      await flush();
+      edge.calls[0]!.resolve(bytes(3));
+      const results = await Promise.all([live, other, late]);
+      expect(results.map((r) => new Uint8Array(r.bytes))).toEqual(Array(3).fill(new Uint8Array([3])));
+      // The throwing caller does not starve the others.
+      expect(log).toEqual(["start", "firstByte"]);
+
+      const hit = await tts.synthesize({ text: "a", ...thrower });
+      expect(new Uint8Array(hit.bytes)).toEqual(new Uint8Array([3]));
+    });
+
+    it("an aborted caller's hooks are not called", async () => {
+      const { tts, edge } = setup({ concurrency: 1 });
+      const blocker = tts.synthesize({ text: "blocker" });
+      const aborted: string[] = [];
+      const kept: string[] = [];
+      const controller = new AbortController();
+      const gone = tts.synthesize({ text: "a", signal: controller.signal, ...phases(aborted) });
+      const stays = tts.synthesize({ text: "a", ...phases(kept) });
+      controller.abort();
+      await expect(gone).rejects.toMatchObject({ name: "AbortError" });
+
+      edge.calls[0]!.resolve(bytes(1));
+      await blocker;
+      await flush();
+      edge.calls[1]!.firstByte();
+
+      // A late joiner aborting before its catch-up microtask hears nothing either.
+      const lateController = new AbortController();
+      const lateLog: string[] = [];
+      const late = tts.synthesize({ text: "a", signal: lateController.signal, ...phases(lateLog) });
+      lateController.abort();
+      await expect(late).rejects.toMatchObject({ name: "AbortError" });
+
+      edge.calls[1]!.resolve(bytes(2));
+      await stays;
+      await flush();
+      expect(kept).toEqual(["start", "firstByte"]);
+      expect(aborted).toEqual([]);
+      expect(lateLog).toEqual([]);
+
+      // Nor does a cache hit aborted right after the call.
+      const hitController = new AbortController();
+      const hitLog: string[] = [];
+      const hit = tts.synthesize({ text: "a", signal: hitController.signal, ...phases(hitLog) });
+      hitController.abort();
+      await hit;
+      await flush();
+      expect(hitLog).toEqual([]);
+    });
+
+    it("prefetch forwards hooks", async () => {
+      const { tts, edge } = setup({ concurrency: 1 });
+      const blocker = tts.synthesize({ text: "blocker" });
+      const log: string[] = [];
+      tts.prefetch({ text: "a", ...phases(log) });
+      await flush();
+      expect(log).toEqual([]);
+      edge.calls[0]!.resolve(bytes(1));
+      await blocker;
+      await flush();
+      expect(log).toEqual(["start"]);
+      edge.calls[1]!.firstByte();
+      expect(log).toEqual(["start", "firstByte"]);
+      edge.calls[1]!.resolve(bytes(2));
+      await flush();
+      expect(tts.isCached({ text: "a" })).toBe(true);
     });
   });
 });
