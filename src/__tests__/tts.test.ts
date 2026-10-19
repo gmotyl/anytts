@@ -756,6 +756,33 @@ describe("createTts", () => {
       expect(hitLog).toEqual([]);
     });
 
+    it("a settled flight releases its callers' hooks", async () => {
+      const { tts, edge } = setup();
+      const log: string[] = [];
+      const result = tts.synthesize({ text: "a", ...phases(log) });
+      await flush();
+      edge.calls[0]!.resolve(bytes(1));
+      await result;
+      await flush();
+      // An engine still holding its hooks after the settle reaches no caller.
+      edge.calls[0]!.firstByte();
+      expect(log).toEqual(["start"]);
+    });
+
+    it("an onStart that aborts the only caller skips the engine", async () => {
+      const { tts, edge } = setup({ concurrency: 1 });
+      const blocker = tts.synthesize({ text: "blocker" });
+      const controller = new AbortController();
+      const result = tts.synthesize({ text: "a", signal: controller.signal, onStart: () => controller.abort() });
+      await flush();
+      edge.calls[0]!.resolve(bytes(1));
+      await blocker;
+      await expect(result).rejects.toMatchObject({ name: "AbortError" });
+      await flush();
+      expect(edge.calls).toHaveLength(1);
+      expect(tts.state({ text: "a" })).toBe("cold");
+    });
+
     it("prefetch forwards hooks", async () => {
       const { tts, edge } = setup({ concurrency: 1 });
       const blocker = tts.synthesize({ text: "blocker" });

@@ -188,6 +188,8 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
    * `drop`. A later settle for the same flight (the `job.done` release after an abort) is a no-op.
    */
   const settle = (key: string, flight: InFlight): void => {
+    // An engine may hold its hooks past the settle; it must not keep callers' requests alive.
+    flight.phases.listeners.clear();
     if (inFlight.get(key) !== flight) return;
     inFlight.delete(key);
     if (!cache.has(key)) emit({ type: "drop", key });
@@ -214,6 +216,8 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
 
   const attempt = async (r: Resolved, text: string, signal: AbortSignal, phases: Phases): Promise<SynthesisResult> => {
     for (let tries = 0; ; tries++) {
+      // An `onStart` hook may have aborted the only caller: no engine call for nobody.
+      if (signal.aborted) throw abortError();
       // A per-attempt controller, linked to the job's, lets `restartStalled` end this call alone.
       const current: RunningAttempt = { controller: new AbortController(), firstByte: false };
       const onJobAbort = () => current.controller.abort(signal.reason);
