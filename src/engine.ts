@@ -7,7 +7,10 @@ export interface VoiceInfo {
   multilingual: boolean;
 }
 
-/** Progress callbacks an engine may report through; engines that ignore them stay valid. */
+/**
+ * Progress callbacks an engine may report through; engines that ignore them stay valid. An engine
+ * that never calls `onFirstByte` looks silent to `Tts.restartStalled`, which may restart it mid-stream.
+ */
 export interface EngineHooks {
   /** The first audio byte of this call arrived. Called at most once per `synthesize` call. */
   onFirstByte?(): void;

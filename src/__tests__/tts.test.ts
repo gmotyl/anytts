@@ -894,5 +894,37 @@ describe("createTts", () => {
       edge.calls[1]!.resolve(bytes(1));
       await result;
     });
+
+    it("a late first byte from a restarted attempt is ignored", async () => {
+      const { tts, edge } = setup({ retries: 2 });
+      const log: string[] = [];
+      const result = tts.synthesize({ text: "a", onFirstByte: () => log.push("firstByte") });
+      await flush();
+      expect(tts.restartStalled()).toBe(true);
+      await flush();
+      expect(edge.calls).toHaveLength(2);
+      // The abandoned call reports audio after it was replaced.
+      edge.calls[0]!.firstByte();
+      await flush();
+      expect(log).toEqual([]);
+      // The replacement is still silent, so it stays restartable.
+      expect(tts.restartStalled()).toBe(true);
+      await flush();
+      expect(edge.calls).toHaveLength(3);
+      edge.calls[2]!.resolve(bytes(1));
+      await result;
+    });
+
+    it("restartStalled skips an attempt whose job was already aborted", async () => {
+      const { tts, edge } = setup({ retries: 1 });
+      const controller = new AbortController();
+      const result = tts.synthesize({ text: "a", signal: controller.signal });
+      await flush();
+      expect(edge.calls).toHaveLength(1);
+      controller.abort();
+      // The attempt is aborted but has not reached its `finally` yet.
+      expect(tts.restartStalled()).toBe(false);
+      await expect(result).rejects.toMatchObject({ name: "AbortError" });
+    });
   });
 });

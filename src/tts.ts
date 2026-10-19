@@ -61,6 +61,8 @@ export interface Tts {
   /**
    * Fails every running attempt that has not delivered its first byte as `first-byte-timeout`:
    * retried at once if budget remains, else the request rejects. `true` if any attempt was restarted.
+   * Only the engine's `EngineHooks.onFirstByte` marks an attempt as streaming: an engine that never
+   * calls it keeps its attempts restartable even while audio is flowing.
    */
   restartStalled(): boolean;
 }
@@ -222,7 +224,6 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
       const current: RunningAttempt = { controller: new AbortController(), firstByte: false };
       const onJobAbort = () => current.controller.abort(signal.reason);
       signal.addEventListener("abort", onJobAbort, { once: true });
-      if (signal.aborted) onJobAbort();
       running.add(current);
       const hooks = {
         onFirstByte: () => {
@@ -368,7 +369,8 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     restartStalled() {
       let restarted = false;
       for (const current of [...running]) {
-        if (current.firstByte) continue;
+        // Already aborted (job aborted, or restarted) but not yet in its `finally`: nothing to restart.
+        if (current.firstByte || current.controller.signal.aborted) continue;
         // Deregistered now, not when the call settles, so a second call before the retry is a no-op.
         running.delete(current);
         current.controller.abort(new TtsError("first-byte-timeout", "restarted before the first audio byte"));
