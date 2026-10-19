@@ -47,11 +47,40 @@ tts.isCached({ text: "Następne zdanie.", lang: "pl" }); // true once synthesize
 const unsubscribe = tts.subscribe((e) => console.log(e.type, e.key));
 ```
 
-`synthesize` accepts `{ text, lang?, voice?, engine?, tier?, signal? }`. An explicit `voice`
-wins over `lang`, and the tier defaults to the first one configured. Identical concurrent
-requests share one synthesis; asking again on a higher tier promotes the queued job. An aborted
-`signal` rejects with an `AbortError`, and the job is cancelled once nobody is waiting for it.
-`bytes` is shared with the cache: do not detach or transfer it.
+`synthesize` accepts `{ text, lang?, voice?, engine?, tier?, signal?, onStart?, onFirstByte? }`.
+An explicit `voice` wins over `lang`, and the tier defaults to the first one configured.
+Identical concurrent requests share one synthesis; asking again on a higher tier promotes the
+queued job. An aborted `signal` rejects with an `AbortError`, and the job is cancelled once
+nobody is waiting for it. `bytes` is shared with the cache: do not detach or transfer it.
+
+`onStart` fires when the job leaves the queue and `onFirstByte` when the first audio chunk
+arrives, each at most once per caller and always in that order, however many retries the job
+takes. A caller that joins a running job or hits the cache still hears both, in a microtask after
+`synthesize` returns; an aborted caller hears nothing more, and a throwing hook is ignored.
+`prefetch` forwards them too.
+
+```ts
+await tts.synthesize({
+  text: "Cześć!",
+  lang: "pl",
+  onStart: () => showSpinner(), // synthesis started (left the queue)
+  onFirstByte: () => showWaveform(), // audio is flowing
+});
+```
+
+### Restarting a silent attempt
+
+`tts.restartStalled()` fails every running attempt that has not delivered its first byte yet as
+`first-byte-timeout`: it is retried at once if the engine's `retries` budget allows, otherwise the
+request rejects. It returns `true` if it restarted anything. Attempts already streaming are left
+alone. Call it when a backgrounded tab or a sleeping device comes back, since a connection
+opened before the pause rarely answers after it:
+
+```ts
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") tts.restartStalled();
+});
+```
 
 ### Observing a request
 
@@ -162,6 +191,15 @@ const tts = createTts({
   scheduler: { concurrency: 2, tiers: [{ name: "play" }] },
 });
 ```
+
+### Engine hooks
+
+Engines report progress through `EngineHooks` (exported as a type), passed as the fourth
+argument of `Engine.synthesize(text, voice, signal, hooks?)`. The built-in Edge engine calls
+`hooks.onFirstByte()` on the first audio chunk, direct or through the relay; that is what drives
+the request's `onFirstByte` and tells `restartStalled` an attempt is streaming. Hooks are
+optional: an engine that never calls `onFirstByte` still works, but its attempts look silent and
+stay restartable even while audio is flowing.
 
 ## Errors
 
