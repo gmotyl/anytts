@@ -774,4 +774,98 @@ describe("createTts", () => {
       expect(tts.isCached({ text: "a" })).toBe(true);
     });
   });
+
+  describe("restartStalled", () => {
+    it("restartStalled aborts a pre-first-byte attempt into its retry", async () => {
+      const { tts, edge } = setup({ retries: 1 });
+      const log: string[] = [];
+      const result = tts.synthesize({
+        text: "a",
+        onStart: () => log.push("start"),
+        onFirstByte: () => log.push("firstByte"),
+      });
+      await flush();
+      expect(edge.calls).toHaveLength(1);
+      expect(tts.restartStalled()).toBe(true);
+      expect(edge.calls[0]!.signal.aborted).toBe(true);
+      await flush();
+      expect(edge.calls).toHaveLength(2);
+      expect(edge.calls[1]!.signal.aborted).toBe(false);
+      edge.calls[1]!.firstByte();
+      edge.calls[1]!.resolve(bytes(5));
+      expect(new Uint8Array((await result).bytes)).toEqual(new Uint8Array([5]));
+      // Phases fire once per flight across the restart.
+      expect(log).toEqual(["start", "firstByte"]);
+    });
+
+    it("restartStalled on the last attempt rejects with first-byte-timeout", async () => {
+      const { tts, edge } = setup({ retries: 0 });
+      const result = tts.synthesize({ text: "a" });
+      await flush();
+      expect(tts.restartStalled()).toBe(true);
+      await expect(result).rejects.toMatchObject({ name: "TtsError", kind: "first-byte-timeout" });
+      expect(edge.calls).toHaveLength(1);
+      expect(tts.state({ text: "a" })).toBe("cold");
+    });
+
+    it("restartStalled returns false when nothing is running", async () => {
+      const { tts, edge } = setup();
+      expect(tts.restartStalled()).toBe(false);
+      const done = tts.synthesize({ text: "a" });
+      await flush();
+      edge.calls[0]!.resolve(bytes(1));
+      await done;
+      expect(tts.restartStalled()).toBe(false);
+    });
+
+    it("restartStalled leaves a streaming attempt alone", async () => {
+      const { tts, edge } = setup({ concurrency: 2 });
+      const streaming = tts.synthesize({ text: "a" });
+      await flush();
+      edge.calls[0]!.firstByte();
+      expect(tts.restartStalled()).toBe(false);
+      expect(edge.calls[0]!.signal.aborted).toBe(false);
+
+      // Only the silent one of two running attempts is restarted.
+      const silent = tts.synthesize({ text: "b" });
+      await flush();
+      expect(tts.restartStalled()).toBe(true);
+      expect(edge.calls[0]!.signal.aborted).toBe(false);
+      expect(edge.calls[1]!.signal.aborted).toBe(true);
+      await flush();
+      expect(edge.calls).toHaveLength(3);
+      edge.calls[0]!.resolve(bytes(1));
+      edge.calls[2]!.resolve(bytes(2));
+      await Promise.all([streaming, silent]);
+    });
+
+    it("a caller abort during a restarted attempt yields AbortError", async () => {
+      const { tts, edge } = setup({ retries: 1 });
+      const controller = new AbortController();
+      const result = tts.synthesize({ text: "a", signal: controller.signal });
+      await flush();
+      expect(tts.restartStalled()).toBe(true);
+      await flush();
+      expect(edge.calls).toHaveLength(2);
+      controller.abort();
+      await expect(result).rejects.toMatchObject({ name: "AbortError" });
+      expect(edge.calls[1]!.signal.aborted).toBe(true);
+      await flush();
+      expect(edge.calls).toHaveLength(2);
+      expect(tts.restartStalled()).toBe(false);
+    });
+
+    it("a second restartStalled before the retry starts is a no-op", async () => {
+      const { tts, edge } = setup({ retries: 2 });
+      const result = tts.synthesize({ text: "a" });
+      await flush();
+      expect(tts.restartStalled()).toBe(true);
+      expect(tts.restartStalled()).toBe(false);
+      await flush();
+      // One restart spent one retry: the second attempt is running, one retry remains.
+      expect(edge.calls).toHaveLength(2);
+      edge.calls[1]!.resolve(bytes(1));
+      await result;
+    });
+  });
 });

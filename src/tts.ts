@@ -58,6 +58,11 @@ export interface Tts {
   /** `ready` when cached, `pending` while queued or running, `cold` otherwise (including unknown voices). */
   state(req: SynthesisRequest): "cold" | "pending" | "ready";
   subscribe(listener: TtsListener): () => void;
+  /**
+   * Fails every running attempt that has not delivered its first byte as `first-byte-timeout`:
+   * retried at once if budget remains, else the request rejects. `true` if any attempt was restarted.
+   */
+  restartStalled(): boolean;
 }
 
 export type EngineFactory = (options: EdgeEngineOptions) => Engine;
@@ -103,6 +108,12 @@ interface InFlight {
   controller: AbortController;
   callers: number;
   phases: Phases;
+}
+
+/** One running engine call; `restartStalled` aborts it while `firstByte` is still false. */
+interface RunningAttempt {
+  controller: AbortController;
+  firstByte: boolean;
 }
 
 const newPhases = (): Phases => ({ started: false, firstByte: false, listeners: new Set() });
@@ -159,6 +170,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
   const inFlight = new Map<string, InFlight>();
   // In-flight (`pending` / `drop`) listeners; cache events come straight from `LruCache`.
   const listeners = new Set<TtsListener>();
+  const running = new Set<RunningAttempt>();
 
   const emit = (e: TtsEvent): void => {
     for (const listener of [...listeners]) {
@@ -201,14 +213,33 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
   };
 
   const attempt = async (r: Resolved, text: string, signal: AbortSignal, phases: Phases): Promise<SynthesisResult> => {
-    const hooks = { onFirstByte: () => reach(phases, "firstByte") };
     for (let tries = 0; ; tries++) {
+      // A per-attempt controller, linked to the job's, lets `restartStalled` end this call alone.
+      const current: RunningAttempt = { controller: new AbortController(), firstByte: false };
+      const onJobAbort = () => current.controller.abort(signal.reason);
+      signal.addEventListener("abort", onJobAbort, { once: true });
+      if (signal.aborted) onJobAbort();
+      running.add(current);
+      const hooks = {
+        onFirstByte: () => {
+          // An abandoned call reporting late audio must not speak for the attempt that replaced it.
+          if (current.controller.signal.aborted) return;
+          current.firstByte = true;
+          reach(phases, "firstByte");
+        },
+      };
       try {
-        const bytes = await r.engine.synthesize(text, r.voice, signal, hooks);
+        const bytes = await r.engine.synthesize(text, r.voice, current.controller.signal, hooks);
         return { bytes, mime: "audio/mpeg", engine: r.engineId, voice: r.voice };
-      } catch (error) {
+      } catch (caught) {
+        // An engine call ended by `restartStalled` fails with the restart's reason; a job abort stays as is.
+        const { reason } = current.controller.signal;
+        const error = !signal.aborted && current.controller.signal.aborted && reason instanceof TtsError ? reason : caught;
         const retry = error instanceof TtsError && isTransient(error.kind) && tries < r.retries && !signal.aborted;
         if (!retry) throw error;
+      } finally {
+        running.delete(current);
+        signal.removeEventListener("abort", onJobAbort);
       }
     }
   };
@@ -329,6 +360,17 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
         unsubscribeCache();
         listeners.delete(listener);
       };
+    },
+    restartStalled() {
+      let restarted = false;
+      for (const current of [...running]) {
+        if (current.firstByte) continue;
+        // Deregistered now, not when the call settles, so a second call before the retry is a no-op.
+        running.delete(current);
+        current.controller.abort(new TtsError("first-byte-timeout", "restarted before the first audio byte"));
+        restarted = true;
+      }
+      return restarted;
     },
   };
   registerVoiceSource(
