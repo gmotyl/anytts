@@ -127,8 +127,8 @@ interface Tts { /* existing */ restartStalled(): boolean }
 
 **Verification: non-testable** — Run: `pnpm test && pnpm lint && pnpm build && npm pack --dry-run` — Expected: all green; tarball lists `dist/index.d.ts` containing `restartStalled` and `onFirstByte`.
 
-- [ ] **Step 1: README + version bump** — Run: the command above — Expected: as stated
-- [ ] **Step 2: Commit** — `git commit -m "chore: release 0.3.0"`
+- [x] **Step 1: README + version bump** — Run: the command above — Expected: as stated
+- [x] **Step 2: Commit** — `git commit -m "chore: release 0.3.0"`
 
 ---
 
