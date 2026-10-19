@@ -46,9 +46,9 @@ synthesize(text: string, voice: string, signal: AbortSignal, hooks?: EngineHooks
 - "edge engine without hooks behaves as before"
 - "relay client calls onFirstByte once on the first body chunk"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm test` — Expected: FAIL (new tests)
-- [ ] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -m "feat(edge): report the first audio byte through engine hooks"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm test` — Expected: FAIL (new tests)
+- [x] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -m "feat(edge): report the first audio byte through engine hooks"`
 
 ---
 
