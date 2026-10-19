@@ -81,9 +81,9 @@ interface SynthesisRequest { /* existing */ onStart?(): void; onFirstByte?(): vo
 - "an aborted caller's hooks are not called"
 - "prefetch forwards hooks"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm test` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -m "feat(tts): per-request onStart and onFirstByte hooks"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm test` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -m "feat(tts): per-request onStart and onFirstByte hooks"`
 
 ---
 
