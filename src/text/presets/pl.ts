@@ -61,6 +61,11 @@ export const PRONUNCIATION_MAP: Readonly<Record<string, string>> = Object.freeze
   // inside a compound, so it has to be spelled out here.
   tailwindcss: 'tejlłind si-es-es',
   typescript: 'tajpskrypt',
+  javascript: 'dżawaskrypt',
+  // The whole-word `gpu` acronym cannot match inside these compounds, so the
+  // Web* names spell the acronym tail out themselves.
+  webgpu: 'łeb dżi-pi-ju',
+  webgl: 'łeb dżi-el',
   usememo: 'juz memo',
   usecallback: 'juz kolbek',
   useeffect: 'juz efekt',
@@ -68,7 +73,6 @@ export const PRONUNCIATION_MAP: Readonly<Record<string, string>> = Object.freeze
   useref: 'juz ref',
   compiler: 'kompajler',
   nvidia: 'en widia',
-  'node.js': 'noud dżej es',
   nodejs: 'noud dżej es',
   turbopack: 'turbo pak',
   turbopacku: 'turbo paku',
@@ -109,7 +113,6 @@ export const PRONUNCIATION_MAP: Readonly<Record<string, string>> = Object.freeze
   exploit: 'eksplojt',
   reasoning: 'rizoning',
   'type-aware': 'tajp ełer',
-  'js/ts': 'dżej es / ti es',
   'key takeaways': 'kluczowe wnioski:',
   "pipeline'y": 'pajplajny',
   worker: 'łerker',
@@ -163,6 +166,17 @@ export const ACRONYM_MAP: Readonly<Record<string, string>> = Object.freeze({
   // this key unambiguous, and it must consume "CI/CD" whole before the bare
   // `CI`/`CD` exact keys could split it into "si-aj/si-di".
   'ci/cd': 'si-aj-si-di',
+  // `js` is not a Polish word, so case-insensitive word mode is safe; it also
+  // reads the ".js" suffix of "Next.js"/"Vue.js" (the dot is a word boundary).
+  // "JSON" stays `json`: the letter after "js" blocks the word end.
+  js: 'dżej es',
+  // Moved from PRONUNCIATION_MAP for the same reason as `ci/cd`: the word pass
+  // runs before the stem pass, so as stems these were split by the bare `js`
+  // key ("Node.dżej es") before they could match. Word mode, longest key first,
+  // consumes them whole. Word mode drops the stem's Polish endings, which costs
+  // nothing: all 590 corpus occurrences of "Node.js" are the bare word.
+  'node.js': 'noud dżej es',
+  'js/ts': 'dżej es / ti es',
 
   // Demoted from PRONUNCIATION_MAP: each is shorter than MIN_STEM_KEY_LENGTH, so
   // as a stem it swallowed every longer word it merely prefixed — `mac` turned

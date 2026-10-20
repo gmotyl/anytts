@@ -418,3 +418,29 @@ describe('pronunciation map invariants', () => {
     expect(applyPronunciation('CI/CD i CI razem', 'pl')).toBe('si-aj-si-di i si-aj razem')
   })
 })
+
+// Heard on the motyl reader: "Działa na JS i WebGPU" came out letter by letter in
+// English ("jot es i web gie pe uu") — `js` had no entry and the whole-word `gpu`
+// cannot match inside "WebGPU".
+describe('applyPronunciation — JS, WebGPU, WebGL and JavaScript', () => {
+  it('pronounces JS and WebGPU in the heard sentence', () => {
+    expect(applyPronunciation('Działa na JS i WebGPU, ', 'pl')).toBe('Działa na dżej es i łeb dżi-pi-ju, ')
+  })
+
+  it('pronounces WebGL, JavaScript (with Polish inflection) and a .js suffix', () => {
+    expect(applyPronunciation('WebGL', 'pl')).toBe('łeb dżi-el')
+    expect(applyPronunciation('JavaScript', 'pl')).toBe('dżawaskrypt')
+    expect(applyPronunciation('JavaScriptu', 'pl')).toBe('dżawaskryptu')
+    expect(applyPronunciation('Next.js', 'pl')).toBe('Next.dżej es')
+    expect(applyPronunciation('Vue.js', 'pl')).toBe('Vue.dżej es')
+  })
+
+  it('leaves the existing js-bearing and gpu entries as they were', () => {
+    expect(applyPronunciation('Node.js', 'pl')).toBe('noud dżej es')
+    expect(applyPronunciation('NodeJS', 'pl')).toBe('noud dżej es')
+    expect(applyPronunciation('JS/TS', 'pl')).toBe('dżej es / ti es')
+    expect(applyPronunciation('JSON', 'pl')).toBe('dżej-son')
+    expect(applyPronunciation('GPU', 'pl')).toBe('dżi-pi-ju')
+    expect(applyPronunciation('TypeScript', 'pl')).toBe('tajpskrypt')
+  })
+})
