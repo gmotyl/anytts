@@ -228,6 +228,49 @@ describe("edge engine direct/relay mode (browser)", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("relay client calls onFirstByte once on the first body chunk", async () => {
+    setUserAgent(CHROME_UA);
+    const onFirstByte = vi.fn();
+    let push!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({ start: (c) => void (push = c) });
+    fetchMock.mockResolvedValue(new Response(body, { status: 200, headers: { "content-type": "audio/mpeg" } }));
+
+    const promise = engineWith().synthesize("Cześć", VOICE, signal(), { onFirstByte });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(onFirstByte).not.toHaveBeenCalled();
+    push.enqueue(new Uint8Array([1]));
+    await vi.waitFor(() => expect(onFirstByte).toHaveBeenCalledTimes(1));
+    push.enqueue(new Uint8Array([2]));
+    push.close();
+
+    expect(new Uint8Array(await promise)).toEqual(new Uint8Array([1, 2]));
+    expect(onFirstByte).toHaveBeenCalledTimes(1);
+  });
+
+  it("auto calls onFirstByte once when a dropped turn is retried direct", async () => {
+    setUserAgent(EDGE_UA);
+    const onFirstByte = vi.fn();
+    const promise = engineWith().synthesize("one", VOICE, signal(), { onFirstByte });
+    FakeSocket.instances[0]!.drop();
+    await vi.waitFor(() => expect(FakeSocket.instances).toHaveLength(2));
+    expect(onFirstByte).not.toHaveBeenCalled();
+    FakeSocket.instances[1]!.speak([1]);
+    expect(new Uint8Array(await promise)).toEqual(new Uint8Array([1]));
+    expect(onFirstByte).toHaveBeenCalledTimes(1);
+  });
+
+  it("auto calls onFirstByte once when two dropped turns fall back to the relay", async () => {
+    setUserAgent(EDGE_UA);
+    fetchMock.mockImplementation(async () => audioResponse([9]));
+    const onFirstByte = vi.fn();
+    const promise = engineWith().synthesize("one", VOICE, signal(), { onFirstByte });
+    FakeSocket.instances[0]!.drop();
+    await vi.waitFor(() => expect(FakeSocket.instances).toHaveLength(2));
+    FakeSocket.instances[1]!.drop();
+    expect(new Uint8Array(await promise)).toEqual(new Uint8Array([9]));
+    expect(onFirstByte).toHaveBeenCalledTimes(1);
+  });
+
   it("relay error kinds are rehydrated", async () => {
     setUserAgent(CHROME_UA);
     const engine = engineWith();

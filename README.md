@@ -47,11 +47,48 @@ tts.isCached({ text: "Następne zdanie.", lang: "pl" }); // true once synthesize
 const unsubscribe = tts.subscribe((e) => console.log(e.type, e.key));
 ```
 
-`synthesize` accepts `{ text, lang?, voice?, engine?, tier?, signal? }`. An explicit `voice`
-wins over `lang`, and the tier defaults to the first one configured. Identical concurrent
-requests share one synthesis; asking again on a higher tier promotes the queued job. An aborted
-`signal` rejects with an `AbortError`, and the job is cancelled once nobody is waiting for it.
-`bytes` is shared with the cache: do not detach or transfer it.
+`synthesize` accepts `{ text, lang?, voice?, engine?, tier?, signal?, onStart?, onFirstByte? }`.
+An explicit `voice` wins over `lang`, and the tier defaults to the first one configured.
+Identical concurrent requests share one synthesis; asking again on a higher tier promotes the
+queued job. An aborted `signal` rejects with an `AbortError`, and the job is cancelled once
+nobody is waiting for it. `bytes` is shared with the cache: do not detach or transfer it.
+
+`onStart` fires when the job leaves the queue and `onFirstByte` when the first audio chunk
+arrives, each at most once per caller and always in that order, however many retries the job
+takes. A caller that joins a running job hears the phases the job already passed in a microtask
+after `synthesize` returns, and later ones as they happen; a cache hit hears both in that
+microtask. An aborted caller hears nothing more, and a throwing hook is ignored.
+`prefetch` forwards them too.
+
+```ts
+await tts.synthesize({
+  text: "Cześć!",
+  lang: "pl",
+  onStart: () => showSpinner(), // synthesis started (left the queue)
+  onFirstByte: () => showWaveform(), // audio is flowing
+});
+```
+
+### Restarting a silent attempt
+
+`tts.restartStalled()` fails every running attempt that has not delivered its first byte yet as
+`first-byte-timeout`: it is retried at once if the engine's `retries` budget allows, otherwise the
+request rejects. It returns `true` if it restarted anything. Attempts already streaming are left
+alone. Call it when a backgrounded tab or a sleeping device comes back, since a connection
+opened before the pause rarely answers after it:
+
+```ts
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") tts.restartStalled();
+});
+```
+
+### How engines report the first byte
+
+Built-in engines receive an `EngineHooks` object (exported as a type) with each call and report
+the first audio chunk through `hooks.onFirstByte()`; the Edge engine does so direct or through
+the relay. That signal drives the request's `onFirstByte` and tells `restartStalled` an attempt
+is streaming: until it fires, the attempt counts as silent and can be restarted.
 
 ### Observing a request
 
@@ -168,14 +205,14 @@ const tts = createTts({
 Engine failures reject with `TtsError`, which carries a `kind` (and an HTTP `status` when one
 is known):
 
-| `kind`               | Meaning                                              | Transient |
-| -------------------- | ---------------------------------------------------- | --------- |
-| `rejected`           | The service refused the request or the handshake     | no        |
-| `first-byte-timeout` | No audio arrived within the first-byte deadline      | yes       |
-| `stalled`            | Audio started, then the stream stopped mid-way       | yes       |
-| `network`            | Connection failed, dropped or sent malformed data    | yes       |
-| `no-audio`           | The request finished without any audio               | no        |
-| `unknown-voice`      | The voice is not in the engine's catalog             | no        |
+| `kind`               | Meaning                                                                                           | Transient |
+| -------------------- | ------------------------------------------------------------------------------------------------- | --------- |
+| `rejected`           | The service refused the request or the handshake                                                  | no        |
+| `first-byte-timeout` | No audio arrived within the first-byte deadline, or `restartStalled()` restarted the last attempt | yes       |
+| `stalled`            | Audio started, then the stream stopped mid-way                                                    | yes       |
+| `network`            | Connection failed, dropped or sent malformed data                                                 | yes       |
+| `no-audio`           | The request finished without any audio                                                            | no        |
+| `unknown-voice`      | The voice is not in the engine's catalog                                                          | no        |
 
 Transient kinds are retried automatically (`retries` per engine, default 1) and can be checked
 with `isTransient(kind)`; the rest are final, so show them to the user rather than retrying.

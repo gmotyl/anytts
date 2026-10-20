@@ -1,3 +1,4 @@
+import type { EngineHooks } from "../../engine.js";
 import { TtsError, type TtsErrorKind } from "../../errors.js";
 
 export interface RelayClientOptions {
@@ -45,6 +46,7 @@ export function relaySynthesize(
   text: string,
   voice: string,
   signal: AbortSignal,
+  hooks?: EngineHooks,
 ): Promise<ArrayBuffer> {
   const { url, firstByteMs, stallMs } = options;
   return new Promise((resolve, reject) => {
@@ -99,9 +101,11 @@ export function relaySynthesize(
           const { done, value } = await reader.read();
           if (settled) return;
           if (done) break;
+          const first = total === 0;
           chunks.push(value);
           total += value.length;
           arm(stallMs, "stalled");
+          if (first && value.length > 0) hooks?.onFirstByte?.();
         }
       } catch (cause) {
         return fail(new TtsError("network", "relay body failed", { cause }));

@@ -4,6 +4,7 @@ export type { SchedulerConfig } from "./scheduler.js";
 export { TtsError, isTransient } from "./errors.js";
 export type { TtsErrorKind } from "./errors.js";
 export type { EdgeEngineOptions } from "./engines/edge/engine.js";
+export type { EngineHooks } from "./engine.js";
 export { resolveVoice } from "./voices.js";
 export { listEngines, listVoices } from "./engines/registry.js";
 export type { VoiceInfo, EngineInfo } from "./engines/registry.js";

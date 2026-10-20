@@ -190,6 +190,54 @@ describe("createEdgeEngine", () => {
     expect(opened).toHaveLength(1);
   });
 
+  it("edge engine calls onFirstByte once on the first audio frame", async () => {
+    const { transport, opened } = fakeTransport();
+    const onFirstByte = vi.fn();
+    const promise = engineWith(transport).synthesize("x", VOICE, new AbortController().signal, { onFirstByte });
+    const { socket } = opened[0]!;
+    socket.serverOpen();
+    socket.serverSend("X-RequestId:abc\r\nPath:turn.start\r\n\r\n{}");
+    socket.serverSend(metadataFrame("x", 0));
+    expect(onFirstByte).not.toHaveBeenCalled();
+    socket.serverSend(audioFrame([1]));
+    expect(onFirstByte).toHaveBeenCalledTimes(1);
+    socket.serverSend(audioFrame([2]));
+    socket.serverSend(TURN_END);
+    await settle(promise);
+    expect(onFirstByte).toHaveBeenCalledTimes(1);
+  });
+
+  it("edge engine without hooks behaves as before", async () => {
+    const { transport, opened } = fakeTransport();
+    const promise = engineWith(transport).synthesize("x", VOICE, new AbortController().signal);
+    const { socket } = opened[0]!;
+    socket.serverOpen();
+    socket.serverSend(audioFrame([1, 2]));
+    socket.serverSend(audioFrame([3]));
+    socket.serverSend(TURN_END);
+    const { value } = await settle(promise);
+    expect(Array.from(new Uint8Array(value!))).toEqual([1, 2, 3]);
+  });
+
+  it("edge engine calls onFirstByte once across a dropped-turn retry", async () => {
+    const { transport, opened } = fakeTransport();
+    const onFirstByte = vi.fn();
+    const promise = settle(
+      engineWith(transport).synthesize("x", VOICE, new AbortController().signal, { onFirstByte }),
+    );
+    opened[0]!.socket.serverOpen();
+    opened[0]!.socket.serverClose();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onFirstByte).not.toHaveBeenCalled();
+    const { socket } = opened[1]!;
+    socket.serverOpen();
+    socket.serverSend(audioFrame([7]));
+    socket.serverSend(audioFrame([8]));
+    socket.serverSend(TURN_END);
+    await promise;
+    expect(onFirstByte).toHaveBeenCalledTimes(1);
+  });
+
   it("close after open with no audio retries once on a fresh connection", async () => {
     const { transport, opened } = fakeTransport();
     const promise = settle(engineWith(transport).synthesize("x", VOICE, new AbortController().signal));
