@@ -139,5 +139,5 @@ interface Tts { /* existing */ restartStalled(): boolean }
 - WHEN Greg has merged it THEN `npm view anytts version` reports `0.3.0`.
 
 - [x] **Step 1: Push + PR** — Run: `git push -u origin feat/phase-hooks-restart-stalled && gh pr create --base main` — Expected: PR URL. Stop; do not merge.
-- [ ] **Step 2 (Greg):** merge, then `npm publish` from `main` after `pnpm build`.
-- [ ] **Step 3: Confirm** — Run: `npm view anytts version` — Expected: `0.3.0`. motyl's Task 1 is unblocked.
+- [x] **Step 2 (Greg):** merge, then `npm publish` from `main` after `pnpm build`.
+- [x] **Step 3: Confirm** — Run: `npm view anytts version` — Expected: `0.3.0`. motyl's Task 1 is unblocked.
