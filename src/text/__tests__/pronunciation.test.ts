@@ -452,3 +452,31 @@ describe('applyPronunciation — YAML', () => {
     expect(applyPronunciation('w YAML-u', 'pl')).toBe('w jaml-u')
   })
 })
+
+describe('applyPronunciation — corpus acronyms, space-separated letters', () => {
+  it('reads a spelled acronym as separate letters', () => {
+    expect(applyPronunciation('serwer MCP i RAG', 'pl')).toBe('serwer em si pi i er ej dżi')
+    expect(applyPronunciation('testy E2E i OIDC', 'pl')).toBe('testy end tu end i oł aj di si')
+    expect(applyPronunciation('CDN-y i SVGs', 'pl')).toBe('si di en-y i es wi dżis')
+  })
+
+  it('reads a word-style acronym as one word', () => {
+    expect(applyPronunciation('WASM, CRUD i README', 'pl')).toBe('łazem, krad i ridmi')
+  })
+
+  it('VS Code beats the bare vs', () => {
+    expect(applyPronunciation('VS Code vs Cursor', 'pl')).toBe('wi es koud wersus kersor')
+  })
+
+  it('pronounces the case-sensitive acronyms in uppercase', () => {
+    expect(applyPronunciation('SWE, ML, MIT, IT, DX i V8', 'pl')).toBe(
+      'es dabl ju i, em el, em aj ti, aj ti, di eks i wi ejt'
+    )
+  })
+
+  it('leaves their lowercase homographs alone', () => {
+    for (const text of ['swe dzieci', '200 ml mleka', 'to tylko mit', 'it works', 'Router v8']) {
+      expect(applyPronunciation(text, 'pl')).toBe(text)
+    }
+  })
+})

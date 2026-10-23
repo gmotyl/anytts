@@ -148,6 +148,62 @@ export const ACRONYM_MAP: Readonly<Record<string, string>> = Object.freeze({
   json: 'dżej-son',
   // Word-style like JSON: a Polish voice spells "YAML" letter by letter.
   yaml: 'jaml',
+
+  // Acronyms measured in the motyl corpus (uppercase uses ≥ 16). Letter names are
+  // space-separated so the voice reads them calmly as separate letters; the
+  // hyphen-paced entries above predate that choice.
+  mcp: 'em si pi',
+  glm: 'dżi el em',
+  svg: 'es wi dżi',
+  rag: 'er ej dżi',
+  rsc: 'ar es si',
+  // Longest key first: the phrase beats the bare `vs` (versus) below.
+  'vs code': 'wi es koud',
+  vs: 'wersus',
+  ssr: 'es es ar',
+  seo: 'es i oł',
+  jsx: 'dżej es eks',
+  esm: 'i es em',
+  cdn: 'si di en',
+  agi: 'ej dżi aj',
+  rl: 'ar el',
+  cve: 'si wi i',
+  kv: 'kej wi',
+  wcag: 'dabl ju kag',
+  lts: 'el ti es',
+  wasm: 'łazem',
+  mdn: 'em di en',
+  tls: 'ti el es',
+  rfc: 'ar ef si',
+  orm: 'o ar em',
+  ddd: 'di di di',
+  lcp: 'el si pi',
+  gsap: 'dżi sap',
+  readme: 'ridmi',
+  crud: 'krad',
+  byok: 'bi łaj oł kej',
+  s3: 'es tri',
+  rtx: 'ar ti eks',
+  e2e: 'end tu end',
+  oidc: 'oł aj di si',
+  htmx: 'ejcz ti em eks',
+  stt: 'es ti ti',
+  jit: 'dżit',
+  cqrs: 'si kju ar es',
+  sdlc: 'es di el si',
+  mvp: 'em wi pi',
+  sse: 'es es i',
+  hmr: 'ejcz em ar',
+  xss: 'eks es es',
+  tdd: 'ti di di',
+  csp: 'si es pi',
+  ast: 'ej es ti',
+  gguf: 'dżi dżi ju ef',
+  vm: 'wi em',
+  tpu: 'ti pi ju',
+  pm: 'pi em',
+  http: 'ejcz ti ti pi',
+  id: 'aj di',
   ndjson: 'en-di-dżej-es-on',
 
   // More known acronyms (English letter names, Polish phonetic, hyphen-paced)
@@ -269,6 +325,15 @@ export const EXACT_ACRONYMS: Readonly<Record<string, string>> = Object.freeze({
   IDE: 'aj-di-i',
   PR: 'pi-ar',
   QA: 'kju-ej',
+  // Same asymmetry: "swe" (swe dzieci), "ml" (millilitre), "mit" (myth) and the
+  // English pronoun "it" are ordinary words; "dx" is mostly lowercase in the corpus;
+  // lowercase "v8" is a version ("React Router v8"), only "V8" is the engine.
+  SWE: 'es dabl ju i',
+  ML: 'em el',
+  MIT: 'em aj ti',
+  IT: 'aj ti',
+  DX: 'di eks',
+  V8: 'wi ejt',
 })
 
 export interface PronunciationPass {
