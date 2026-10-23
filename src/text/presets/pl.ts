@@ -149,6 +149,7 @@ export const ACRONYM_MAP: Readonly<Record<string, string>> = Object.freeze({
   json: 'dżej son',
   // Word-style, one token: a Polish voice spells "YAML" letter by letter.
   yaml: 'jaml',
+  ndjson: 'en di dżej es on',
 
   // Acronyms measured in the motyl corpus (uppercase uses ≥ 16). Letter names are
   // space-separated, like every letter-by-letter value in this preset.
@@ -157,7 +158,7 @@ export const ACRONYM_MAP: Readonly<Record<string, string>> = Object.freeze({
   svg: 'es wi dżi',
   rag: 'er ej dżi',
   rsc: 'ar es si',
-  // Longest key first: the phrase beats the bare `vs` (versus) below.
+  // Keys are tried longest first, so the phrase key wins over the bare `vs` (versus).
   'vs code': 'wi es koud',
   vs: 'wersus',
   ssr: 'es es ar',
@@ -203,8 +204,9 @@ export const ACRONYM_MAP: Readonly<Record<string, string>> = Object.freeze({
   tpu: 'ti pi ju',
   pm: 'pi em',
   http: 'ejcz ti ti pi',
+  // Own key: the `(s?)` plural group would read HTTPS as "ejcz ti ti pis".
+  https: 'ejcz ti ti pi es',
   id: 'aj di',
-  ndjson: 'en di dżej es on',
 
   // More known acronyms (English letter names, Polish phonetic, space-separated)
   ux: 'ju eks',
@@ -306,7 +308,7 @@ export const ACRONYM_MAP: Readonly<Record<string, string>> = Object.freeze({
 export const MIN_STEM_KEY_LENGTH = 5
 
 /**
- * Acronyms whose lowercase form is an ordinary Polish word — matched
+ * Acronyms whose lowercase form is an ordinary word or means something else — matched
  * case-SENSITIVELY as a whole word, so only the uppercase spelling is replaced.
  * `ACRONYM_MAP` cannot hold these: it is case-insensitive, so it would also
  * rewrite the ordinary Polish word.
@@ -326,7 +328,8 @@ export const EXACT_ACRONYMS: Readonly<Record<string, string>> = Object.freeze({
   PR: 'pi ar',
   QA: 'kju ej',
   // Same asymmetry: "swe" (swe dzieci), "ml" (millilitre), "mit" (myth) and the
-  // English pronoun "it" are ordinary words; "dx" is mostly lowercase in the corpus;
+  // English pronoun "it" are ordinary words; lowercase "dx" occurs mostly in
+  // identifiers and code-like contexts, so only the uppercase "DX" is the acronym;
   // lowercase "v8" is a version ("React Router v8"), only "V8" is the engine.
   SWE: 'es dabl ju i',
   ML: 'em el',

@@ -486,6 +486,12 @@ describe('applyPronunciation — corpus acronyms, space-separated letters', () =
     expect(applyPronunciation('VS Code vs Cursor', 'pl')).toBe('wi es koud wersus kersor')
   })
 
+  it('HTTPS is spelled out, not read as a plural of HTTP', () => {
+    expect(applyPronunciation('HTTPS', 'pl')).toBe('ejcz ti ti pi es')
+    expect(applyPronunciation('https', 'pl')).toBe('ejcz ti ti pi es')
+    expect(applyPronunciation('HTTP', 'pl')).toBe('ejcz ti ti pi')
+  })
+
   it('pronounces the case-sensitive acronyms in uppercase', () => {
     expect(applyPronunciation('SWE, ML, MIT, IT, DX i V8', 'pl')).toBe(
       'es dabl ju i, em el, em aj ti, aj ti, di eks i wi ejt'
