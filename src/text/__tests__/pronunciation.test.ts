@@ -444,3 +444,11 @@ describe('applyPronunciation — JS, WebGPU, WebGL and JavaScript', () => {
     expect(applyPronunciation('TypeScript', 'pl')).toBe('tajpskrypt')
   })
 })
+
+describe('applyPronunciation — YAML', () => {
+  it('reads YAML as one word, in any case and with a hyphenated ending', () => {
+    expect(applyPronunciation('plik YAML', 'pl')).toBe('plik jaml')
+    expect(applyPronunciation('config.yaml', 'pl')).toBe('config.jaml')
+    expect(applyPronunciation('w YAML-u', 'pl')).toBe('w jaml-u')
+  })
+})

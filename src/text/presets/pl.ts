@@ -146,6 +146,8 @@ export const ACRONYM_MAP: Readonly<Record<string, string>> = Object.freeze({
   cpu: 'si-pi-ju',
   ui: 'ju-łaj,',
   json: 'dżej-son',
+  // Word-style like JSON: a Polish voice spells "YAML" letter by letter.
+  yaml: 'jaml',
   ndjson: 'en-di-dżej-es-on',
 
   // More known acronyms (English letter names, Polish phonetic, hyphen-paced)
