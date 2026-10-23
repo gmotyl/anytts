@@ -59,13 +59,13 @@ export const PRONUNCIATION_MAP: Readonly<Record<string, string>> = Object.freeze
   // Same shape as `claudecode`: the `tailwind` stem left "css" unspoken.
   // The tail is the ACRONYM_MAP `css` value — word mode can never reach it
   // inside a compound, so it has to be spelled out here.
-  tailwindcss: 'tejlłind si-es-es',
+  tailwindcss: 'tejlłind si es es',
   typescript: 'tajpskrypt',
   javascript: 'dżawaskrypt',
   // The whole-word `gpu` acronym cannot match inside these compounds, so the
   // Web* names spell the acronym tail out themselves.
-  webgpu: 'łeb dżi-pi-ju',
-  webgl: 'łeb dżi-el',
+  webgpu: 'łeb dżi pi ju',
+  webgl: 'łeb dżi el',
   usememo: 'juz memo',
   usecallback: 'juz kolbek',
   useeffect: 'juz efekt',
@@ -132,40 +132,101 @@ export const PRONUNCIATION_MAP: Readonly<Record<string, string>> = Object.freeze
  * "client"/"click", `api` could start "apis" — where the stem map would corrupt
  * those words.
  *
- * Values are lowercase Polish phonetic spellings. Letter-by-letter acronyms use
- * commas so the voice paces them like an acronym instead of blurring into one
- * word; word-style acronyms (e.g. JSON → "jay-son") are spelled as one token.
+ * Values are lowercase Polish phonetic spellings. Letter-by-letter acronyms are
+ * spelled with spaces between the letter names (API → "ej pi aj"), never hyphens:
+ * the voice then reads them calmly as separate letters instead of blurring them
+ * into one word. Word-style acronyms (e.g. YAML → "jaml") are spelled as one token.
  * The Polish-phonetic spelling reads correctly on BOTH the Polish voices and the
  * multilingual voices (verified by ear: API/SDK came out right on William).
  */
 export const ACRONYM_MAP: Readonly<Record<string, string>> = Object.freeze({
-  cli: 'si-el-aj',
-  api: 'ej-pi-aj',
-  sdk: 'es-di-kej',
-  gpu: 'dżi-pi-ju',
-  cpu: 'si-pi-ju',
-  ui: 'ju-łaj,',
-  json: 'dżej-son',
-  ndjson: 'en-di-dżej-es-on',
+  cli: 'si el aj',
+  api: 'ej pi aj',
+  sdk: 'es di kej',
+  gpu: 'dżi pi ju',
+  cpu: 'si pi ju',
+  ui: 'ju łaj,',
+  // Word-style, one token, like `yaml` below.
+  json: 'dżejson',
+  // Word-style, one token: a Polish voice spells "YAML" letter by letter.
+  yaml: 'jaml',
+  ndjson: 'en di dżej es on',
 
-  // More known acronyms (English letter names, Polish phonetic, hyphen-paced)
-  ux: 'ju-eks',
-  url: 'ju-ar-el',
-  html: 'ejcz-ti-em-el',
-  css: 'si-es-es',
-  xml: 'eks-em-el',
-  sql: 'es-kju-el',
-  llm: 'el-el-em',
-  jwt: 'dżej-dabl-ju-ti',
-  npm: 'en-pi-em',
-  ssh: 'es-es-ejcz',
-  dns: 'di-en-es',
-  tts: 'ti-ti-es',
-  mr: 'em-ar',
+  // Acronyms measured in the motyl corpus (uppercase uses ≥ 16). Letter names are
+  // space-separated, like every letter-by-letter value in this preset.
+  mcp: 'em si pi',
+  glm: 'dżi el em',
+  svg: 'es wi dżi',
+  rag: 'er ej dżi',
+  rsc: 'ar es si',
+  // Keys are tried longest first, so the phrase key wins over the bare `vs` (versus).
+  'vs code': 'wi es koud',
+  vs: 'wersus',
+  ssr: 'es es ar',
+  seo: 'es i oł',
+  jsx: 'dżej es eks',
+  esm: 'i es em',
+  cdn: 'si di en',
+  agi: 'ej dżi aj',
+  rl: 'ar el',
+  cve: 'si wi i',
+  kv: 'kej wi',
+  wcag: 'dabl ju kag',
+  lts: 'el ti es',
+  wasm: 'łazem',
+  mdn: 'em di en',
+  tls: 'ti el es',
+  rfc: 'ar ef si',
+  orm: 'o ar em',
+  ddd: 'di di di',
+  lcp: 'el si pi',
+  gsap: 'dżi sap',
+  readme: 'ridmi',
+  crud: 'krad',
+  byok: 'bi łaj oł kej',
+  s3: 'es tri',
+  rtx: 'ar ti eks',
+  e2e: 'end tu end',
+  oidc: 'oł aj di si',
+  htmx: 'ejcz ti em eks',
+  stt: 'es ti ti',
+  jit: 'dżit',
+  cqrs: 'si kju ar es',
+  sdlc: 'es di el si',
+  mvp: 'em wi pi',
+  sse: 'es es i',
+  hmr: 'ejcz em ar',
+  xss: 'eks es es',
+  tdd: 'ti di di',
+  csp: 'si es pi',
+  ast: 'ej es ti',
+  gguf: 'dżi dżi ju ef',
+  vm: 'wi em',
+  tpu: 'ti pi ju',
+  pm: 'pi em',
+  http: 'ejcz ti ti pi',
+  // Own key: the `(s?)` plural group would read HTTPS as "ejcz ti ti pis".
+  https: 'ejcz ti ti pi es',
+  id: 'aj di',
+
+  // More known acronyms (English letter names, Polish phonetic, space-separated)
+  ux: 'ju eks',
+  url: 'ju ar el',
+  html: 'ejcz ti em el',
+  css: 'si es es',
+  xml: 'eks em el',
+  sql: 'es kju el',
+  llm: 'el el em',
+  jwt: 'dżej dabl ju ti',
+  npm: 'en pi em',
+  ssh: 'es es ejcz',
+  dns: 'di en es',
+  tts: 'ti ti es',
+  mr: 'em ar',
   // Stays here, and the word pass stays BEFORE the exact pass: the slash makes
   // this key unambiguous, and it must consume "CI/CD" whole before the bare
-  // `CI`/`CD` exact keys could split it into "si-aj/si-di".
-  'ci/cd': 'si-aj-si-di',
+  // `CI`/`CD` exact keys could split it into "si aj/si di".
+  'ci/cd': 'si aj si di',
   // `js` is not a Polish word, so case-insensitive word mode is safe; it also
   // reads the ".js" suffix of "Next.js"/"Vue.js" (the dot is a word boundary).
   // "JSON" stays `json`: the letter after "js" blocks the word end.
@@ -248,7 +309,7 @@ export const ACRONYM_MAP: Readonly<Record<string, string>> = Object.freeze({
 export const MIN_STEM_KEY_LENGTH = 5
 
 /**
- * Acronyms whose lowercase form is an ordinary Polish word — matched
+ * Acronyms whose lowercase form is an ordinary word or means something else — matched
  * case-SENSITIVELY as a whole word, so only the uppercase spelling is replaced.
  * `ACRONYM_MAP` cannot hold these: it is case-insensitive, so it would also
  * rewrite the ordinary Polish word.
@@ -262,11 +323,21 @@ export const EXACT_ACRONYMS: Readonly<Record<string, string>> = Object.freeze({
   // (CI 630/99, CD 157/15, IDE 245/16, PR 538/7, QA 83/9) and the error is
   // asymmetric: a missed lowercase "ci failed" merely reads as Polish, while a
   // case-insensitive `ci` would mispronounce every Polish "ci".
-  CI: 'si-aj',
-  CD: 'si-di',
-  IDE: 'aj-di-i',
-  PR: 'pi-ar',
-  QA: 'kju-ej',
+  CI: 'si aj',
+  CD: 'si di',
+  IDE: 'aj di i',
+  PR: 'pi ar',
+  QA: 'kju ej',
+  // Same asymmetry: "swe" (swe dzieci), "ml" (millilitre), "mit" (myth) and the
+  // English pronoun "it" are ordinary words; lowercase "dx" occurs mostly in
+  // identifiers and code-like contexts, so only the uppercase "DX" is the acronym;
+  // lowercase "v8" is a version ("React Router v8"), only "V8" is the engine.
+  SWE: 'es dabl ju i',
+  ML: 'em el',
+  MIT: 'em aj ti',
+  IT: 'aj ti',
+  DX: 'di eks',
+  V8: 'wi ejt',
 })
 
 export interface PronunciationPass {
@@ -278,7 +349,7 @@ export interface PronunciationPass {
  * The pl preset's passes, in the order `applyPronunciation` runs the modes.
  *
  * `exact` MUST stay last: the `ci/cd` key (word mode) has to consume "CI/CD"
- * whole before a bare `CI` exact key could ever split it into "si-aj/CD".
+ * whole before a bare `CI` exact key could ever split it into "si aj/CD".
  */
 export const PRONUNCIATION_PASSES: readonly PronunciationPass[] = Object.freeze([
   { mode: 'word', map: ACRONYM_MAP },
