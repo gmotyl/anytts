@@ -180,10 +180,10 @@ describe('applyPronunciation — whole-word acronyms (ACRONYM_MAP)', () => {
 // these tests pass against a map that lost the entry.
 describe('applyPronunciation — case-sensitive acronyms (EXACT_ACRONYMS)', () => {
   it('an exact acronym is pronounced in uppercase', () => {
-    expect(applyPronunciation('CI failed again', 'pl')).toBe('si-aj failed again')
-    expect(applyPronunciation('nowe IDE', 'pl')).toBe('nowe aj-di-i')
-    expect(applyPronunciation('otwórz PR', 'pl')).toBe('otwórz pi-ar')
-    expect(applyPronunciation('zespół QA', 'pl')).toBe('zespół kju-ej')
+    expect(applyPronunciation('CI failed again', 'pl')).toBe('si aj failed again')
+    expect(applyPronunciation('nowe IDE', 'pl')).toBe('nowe aj di i')
+    expect(applyPronunciation('otwórz PR', 'pl')).toBe('otwórz pi ar')
+    expect(applyPronunciation('zespół QA', 'pl')).toBe('zespół kju ej')
   })
 
   it('an exact acronym leaves its lowercase Polish homograph alone', () => {
@@ -200,8 +200,8 @@ describe('applyPronunciation — case-sensitive acronyms (EXACT_ACRONYMS)', () =
   })
 
   it('the compound ci/cd key still wins over the bare CI acronym', () => {
-    expect(applyPronunciation('nasz CI/CD działa', 'pl')).toBe('nasz si-aj-si-di działa')
-    expect(applyPronunciation('CI/CD i CI razem', 'pl')).toBe('si-aj-si-di i si-aj razem')
+    expect(applyPronunciation('nasz CI/CD działa', 'pl')).toBe('nasz si aj si di działa')
+    expect(applyPronunciation('CI/CD i CI razem', 'pl')).toBe('si aj si di i si aj razem')
   })
 
   // The plural is the same acronym. Word mode has always carried an optional
@@ -209,10 +209,10 @@ describe('applyPronunciation — case-sensitive acronyms (EXACT_ACRONYMS)', () =
   // occurs 201 times in the corpus and "IDEs" 33, and both were pronounced
   // before these keys became case-sensitive.
   it('a plural of a case-sensitive acronym is still pronounced', () => {
-    expect(applyPronunciation('dwa PRs czekają', 'pl')).toBe('dwa pi-ars czekają')
-    expect(applyPronunciation('zamknąłem PRs.', 'pl')).toBe('zamknąłem pi-ars.')
-    expect(applyPronunciation('nowe IDEs', 'pl')).toBe('nowe aj-di-is')
-    expect(applyPronunciation('dwa QAs i CIs', 'pl')).toBe('dwa kju-ejs i si-ajs')
+    expect(applyPronunciation('dwa PRs czekają', 'pl')).toBe('dwa pi ars czekają')
+    expect(applyPronunciation('zamknąłem PRs.', 'pl')).toBe('zamknąłem pi ars.')
+    expect(applyPronunciation('nowe IDEs', 'pl')).toBe('nowe aj di is')
+    expect(applyPronunciation('dwa QAs i CIs', 'pl')).toBe('dwa kju ejs i si ajs')
   })
 
   // The counter-case: the plural group must not smuggle in case-insensitivity.
@@ -402,6 +402,24 @@ describe('pronunciation map invariants', () => {
     ).toEqual([])
   })
 
+  it('letter-by-letter values are space-separated, not hyphenated', () => {
+    // Values only (a key like `type-aware` is matched text, not speech). No value
+    // is a genuinely hyphenated word, so a hyphen between two letters can only be
+    // letter names glued together ("si-aj") — the voice blurs those; spaces make
+    // it read separate letters ("si aj"). Punctuation-only values (",,", "..")
+    // have no letters, so they never match.
+    const hyphenated = PRONUNCIATION_PASSES.flatMap(({ map }) =>
+      Object.entries(map)
+        .filter(([, say]) => /\p{L}-\p{L}/u.test(say))
+        .map(([key, say]) => `${key}: '${say}'`)
+    )
+
+    expect(
+      hyphenated,
+      `spell letter-by-letter acronyms with spaces, not hyphens: ${hyphenated.join(', ')}`
+    ).toEqual([])
+  })
+
   it('applyPronunciation applies word, stem and exact modes in that order', () => {
     expect(PRONUNCIATION_PASSES.map((pass) => pass.mode)).toEqual(['word', 'stem', 'exact'])
     expect(PRONUNCIATION_PASSES.map((pass) => pass.map)).toEqual([
@@ -413,9 +431,9 @@ describe('pronunciation map invariants', () => {
     // list, so the one below pins the order the list is actually CONSUMED in.
     // The `ci/cd` word key must consume "CI/CD" whole before a bare `CI` exact
     // key could split it — consume the passes in reverse and this reads
-    // "si-aj/si-di" instead.
-    expect(applyPronunciation('nasz CI/CD działa', 'pl')).toBe('nasz si-aj-si-di działa')
-    expect(applyPronunciation('CI/CD i CI razem', 'pl')).toBe('si-aj-si-di i si-aj razem')
+    // "si aj/si di" instead.
+    expect(applyPronunciation('nasz CI/CD działa', 'pl')).toBe('nasz si aj si di działa')
+    expect(applyPronunciation('CI/CD i CI razem', 'pl')).toBe('si aj si di i si aj razem')
   })
 })
 
@@ -424,11 +442,11 @@ describe('pronunciation map invariants', () => {
 // cannot match inside "WebGPU".
 describe('applyPronunciation — JS, WebGPU, WebGL and JavaScript', () => {
   it('pronounces JS and WebGPU in the heard sentence', () => {
-    expect(applyPronunciation('Działa na JS i WebGPU, ', 'pl')).toBe('Działa na dżej es i łeb dżi-pi-ju, ')
+    expect(applyPronunciation('Działa na JS i WebGPU, ', 'pl')).toBe('Działa na dżej es i łeb dżi pi ju, ')
   })
 
   it('pronounces WebGL, JavaScript (with Polish inflection) and a .js suffix', () => {
-    expect(applyPronunciation('WebGL', 'pl')).toBe('łeb dżi-el')
+    expect(applyPronunciation('WebGL', 'pl')).toBe('łeb dżi el')
     expect(applyPronunciation('JavaScript', 'pl')).toBe('dżawaskrypt')
     expect(applyPronunciation('JavaScriptu', 'pl')).toBe('dżawaskryptu')
     expect(applyPronunciation('Next.js', 'pl')).toBe('Next.dżej es')
@@ -439,8 +457,8 @@ describe('applyPronunciation — JS, WebGPU, WebGL and JavaScript', () => {
     expect(applyPronunciation('Node.js', 'pl')).toBe('noud dżej es')
     expect(applyPronunciation('NodeJS', 'pl')).toBe('noud dżej es')
     expect(applyPronunciation('JS/TS', 'pl')).toBe('dżej es / ti es')
-    expect(applyPronunciation('JSON', 'pl')).toBe('dżej-son')
-    expect(applyPronunciation('GPU', 'pl')).toBe('dżi-pi-ju')
+    expect(applyPronunciation('JSON', 'pl')).toBe('dżej son')
+    expect(applyPronunciation('GPU', 'pl')).toBe('dżi pi ju')
     expect(applyPronunciation('TypeScript', 'pl')).toBe('tajpskrypt')
   })
 })
