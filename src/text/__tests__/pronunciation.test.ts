@@ -457,7 +457,7 @@ describe('applyPronunciation — JS, WebGPU, WebGL and JavaScript', () => {
     expect(applyPronunciation('Node.js', 'pl')).toBe('noud dżej es')
     expect(applyPronunciation('NodeJS', 'pl')).toBe('noud dżej es')
     expect(applyPronunciation('JS/TS', 'pl')).toBe('dżej es / ti es')
-    expect(applyPronunciation('JSON', 'pl')).toBe('dżej son')
+    expect(applyPronunciation('JSON', 'pl')).toBe('dżejson')
     expect(applyPronunciation('GPU', 'pl')).toBe('dżi pi ju')
     expect(applyPronunciation('TypeScript', 'pl')).toBe('tajpskrypt')
   })
