@@ -1,0 +1,14 @@
+{
+  "_source": [
+    "https://elevenlabs.io/docs/help-center/technical/api-error-code-400-or-401.md",
+    "https://elevenlabs.io/docs/developers/resources/errors.md"
+  ],
+  "_verified": "verbatim example 401 detail from the help-center page (legacy { status, message } shape); the errors page lists invalid_api_key / missing_api_key / unauthorized as authentication_error (401) in the { type, code, message, request_id } shape",
+  "status": 401,
+  "body": {
+    "detail": {
+      "status": "invalid_api_key",
+      "message": "Invalid API key"
+    }
+  }
+}

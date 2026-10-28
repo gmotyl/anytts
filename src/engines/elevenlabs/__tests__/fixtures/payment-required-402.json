@@ -1,0 +1,13 @@
+{
+  "_source": "https://elevenlabs.io/docs/developers/resources/errors.md",
+  "_verified": "type payment_required = HTTP 402 \"User has insufficient credits or payment is required\" and the detail fields type/code/message/request_id are documented; the code and message values are illustrative (the page lists no 402 code row)",
+  "status": 402,
+  "body": {
+    "detail": {
+      "type": "payment_required",
+      "code": "quota_exceeded",
+      "message": "You have insufficient credits to complete this request.",
+      "request_id": "req_0000000000000000"
+    }
+  }
+}

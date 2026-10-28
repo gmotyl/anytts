@@ -1,0 +1,14 @@
+{
+  "_source": "https://elevenlabs.io/docs/developers/resources/errors.md",
+  "_verified": "429 with type rate_limit_error and code rate_limit_exceeded | concurrent_limit_exceeded is documented; the docs do not mention a Retry-After header (unverified; the engine reads it when present) and the message text is illustrative",
+  "status": 429,
+  "headers": { "retry-after": "7" },
+  "body": {
+    "detail": {
+      "type": "rate_limit_error",
+      "code": "concurrent_limit_exceeded",
+      "message": "Maximum number of concurrent requests exceeded.",
+      "request_id": "req_0000000000000001"
+    }
+  }
+}

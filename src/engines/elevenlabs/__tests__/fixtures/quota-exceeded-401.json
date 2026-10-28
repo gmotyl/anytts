@@ -1,0 +1,11 @@
+{
+  "_source": "https://elevenlabs.io/docs/help-center/technical/api-error-code-400-or-401.md",
+  "_verified": "status code 401 group and detail.status = \"quota_exceeded\" are documented; the message text is illustrative (the page only shows detail examples for 400 and invalid_api_key)",
+  "status": 401,
+  "body": {
+    "detail": {
+      "status": "quota_exceeded",
+      "message": "This request exceeds your quota. You have 12 credits remaining, while 48 credits are required for this request."
+    }
+  }
+}
