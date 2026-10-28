@@ -171,9 +171,9 @@ interface TtsConfig { /* existing */ pronunciation?: Record<string, Pronunciatio
 - "401 maps to unauthorized"
 - "azure defaults to one slot"
 
-- [ ] **Step 1: Write the failing tests** — Run: `corepack pnpm exec vitest run src/engines/azure` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: same — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/engines/azure && git commit -m "feat(engines): Azure F0"`
+- [x] **Step 1: Write the failing tests** — Run: `corepack pnpm exec vitest run src/engines/azure` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: same — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/engines/azure && git commit -m "feat(engines): Azure F0"`
 
 ### Task 8: Registration, catalogs and entry points
 
