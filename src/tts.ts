@@ -455,7 +455,10 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
         req.onFirstByte!();
       }),
     };
-    return walkCascade(order, cascadeMembersFor(req, (r) => synthesizeResolved(r, memberReq)));
+    return walkCascade(order, cascadeMembersFor(req, (r) => synthesizeResolved(r, memberReq))).catch((error: unknown) => {
+      // An abort that lands while a member's failure is on its way to the caller still wins.
+      throw req.signal?.aborted && error instanceof TtsError ? abortError() : error;
+    });
   };
 
   const synthesizeResolved = (r: Resolved, req: SynthesisRequest): Promise<SynthesisResult> => {
@@ -529,12 +532,8 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     const view = cascadeMembersFor(req);
     if (cachedMember(order, view) !== undefined) return "ready";
     for (const id of order) {
-      if (view.skipReason(id)) continue;
-      try {
-        if (inFlight.has(view.prepare(id).key)) return "pending";
-      } catch {
-        // A member that cannot speak the request has no key to look up.
-      }
+      // `cachedMember` has already checked every such member can speak the request.
+      if (!view.skipReason(id) && inFlight.has(view.prepare(id).key)) return "pending";
     }
     return "cold";
   };

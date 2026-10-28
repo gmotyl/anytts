@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Engine, VoiceInfo } from "../engine.js";
+import type { Engine, EngineHooks, VoiceInfo } from "../engine.js";
 import { TtsError } from "../errors.js";
 import { applyPronunciation } from "../text/pronunciation.js";
 import { createTts, type EngineConfig, type TtsConfig } from "../tts.js";
@@ -9,6 +9,7 @@ const voice = (id: string): VoiceInfo => ({ id, label: id, locale: "pl-PL", gend
 interface Call {
   text: string;
   voice: string;
+  hooks: EngineHooks | undefined;
   resolve: (bytes: ArrayBuffer) => void;
   reject: (error: unknown) => void;
 }
@@ -26,9 +27,9 @@ function fakeEngine(id: string, keyed: boolean) {
     id,
     keyed,
     voices: [voice(`${id}-pl`), voice(`${id}-en`), voice(`${id}-alt`)],
-    synthesize(text, v, signal) {
+    synthesize(text, v, signal, hooks) {
       return new Promise<ArrayBuffer>((resolve, reject) => {
-        const call: Call = { text, voice: v, resolve, reject };
+        const call: Call = { text, voice: v, hooks, resolve, reject };
         calls.push(call);
         signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
         if (behaviour === "answer") resolve(new Uint8Array([1]).buffer);
@@ -217,5 +218,50 @@ describe("cascade", () => {
     await flush();
     expect(fake(fakes, "b").calls).toHaveLength(0);
     expect(fake(fakes, "edge").calls).toHaveLength(0);
+  });
+
+  it("phase hooks fire once across members", async () => {
+    const { tts, fakes } = setup();
+    // Both members start and stream; `a` then fails, `b` answers.
+    fake(fakes, "a").set((call) => {
+      call.hooks?.onFirstByte?.();
+      call.reject(new TtsError("rejected"));
+    });
+    fake(fakes, "b").set((call) => {
+      call.hooks?.onFirstByte?.();
+      call.resolve(new Uint8Array([1]).buffer);
+    });
+    let starts = 0;
+    let firstBytes = 0;
+    const result = await tts.synthesize({ text: "x", lang: "pl", onStart: () => starts++, onFirstByte: () => firstBytes++ });
+    await flush();
+    expect(result).toMatchObject({ engine: "b" });
+    expect(fake(fakes, "a").calls).toHaveLength(1);
+    expect(starts).toBe(1);
+    expect(firstBytes).toBe(1);
+  });
+
+  it("an abort wins over a member's failure", async () => {
+    const { tts, fakes } = setup({ a: { apiKey: "k" }, cascade: { order: ["a"] } });
+    const controller = new AbortController();
+    fake(fakes, "a").set((call) => call.reject(new TtsError("rejected")));
+    // The abort lands after the member failed, before the walk hands that failure to the caller.
+    tts.subscribe((e) => {
+      if (e.type === "drop") queueMicrotask(() => controller.abort());
+    });
+    await expect(tts.synthesize({ text: "x", lang: "pl", signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
+    expect(fake(fakes, "a").calls).toHaveLength(1);
+  });
+
+  it("every member's voice is checked before the first request", async () => {
+    const { tts, fakes } = setup();
+    await expect(tts.synthesize({ text: "x", lang: "pl", voices: { b: "nope" } })).rejects.toMatchObject({ kind: "unknown-voice" });
+    expect(fake(fakes, "a").calls).toHaveLength(0);
+    expect(fake(fakes, "b").calls).toHaveLength(0);
+    // A cached earlier member does not hide the bad voice either.
+    await tts.synthesize({ text: "y", lang: "pl" });
+    await expect(tts.synthesize({ text: "y", lang: "pl", voices: { b: "nope" } })).rejects.toMatchObject({ kind: "unknown-voice" });
+    expect(tts.state({ text: "y", lang: "pl", voices: { b: "nope" } })).toBe("cold");
+    expect(tts.isCached({ text: "y", lang: "pl", voices: { b: "nope" } })).toBe(false);
   });
 });

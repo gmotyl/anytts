@@ -42,26 +42,33 @@ export function effectiveOrder(members: readonly string[], requested?: readonly 
   return order;
 }
 
-/** The first member, in `order`, that may be tried and already holds a cached result. */
+/**
+ * Prepares every member in `order` that may be tried, so a voice no member can speak rejects
+ * (`unknown-voice`) before any request is spent.
+ */
+function prepareMembers<M, R>(order: readonly string[], members: CascadeMembers<M, R>): Map<string, M> {
+  const prepared = new Map<string, M>();
+  for (const id of order) if (!members.skipReason(id)) prepared.set(id, members.prepare(id));
+  return prepared;
+}
+
+const firstCached = <M, R>(prepared: Map<string, M>, members: CascadeMembers<M, R>): M | undefined =>
+  [...prepared.values()].find((member) => members.isCached(member));
+
+/**
+ * The first member, in `order`, that may be tried and already holds a cached result. Throws
+ * `unknown-voice` when a member that may be tried cannot speak the request, as the walk would.
+ */
 export function cachedMember<M, R>(order: readonly string[], members: CascadeMembers<M, R>): M | undefined {
-  for (const id of order) {
-    if (members.skipReason(id)) continue;
-    let member: M;
-    try {
-      member = members.prepare(id);
-    } catch {
-      continue;
-    }
-    if (members.isCached(member)) return member;
-  }
-  return undefined;
+  return firstCached(prepareMembers(order, members), members);
 }
 
 /** `unknown-voice` and anything that is not a `TtsError` (an abort, a caller bug) stop the chain. */
 const switchesMember = (error: unknown): error is TtsError => error instanceof TtsError && error.kind !== "unknown-voice";
 
 /**
- * Walks `order` until a member speaks. Cache lookups go first, across every member, so a unit
+ * Walks `order` until a member speaks. Every member that may be tried is prepared first, so a voice
+ * one of them cannot speak rejects before any request. Cache lookups go first, across every member, so a unit
  * already synthesized never costs quota. Then each member is tried in turn; a busy member is
  * waited for (its `run` holds the job in the slot queue), never hopped over. Rejects with the last
  * attempted member's error (a copy carrying the earlier attempts' errors, in order, as `cause` when
@@ -70,7 +77,8 @@ const switchesMember = (error: unknown): error is TtsError => error instanceof T
  * The first member's job is enqueued synchronously, before this returns.
  */
 export async function walkCascade<M, R>(order: readonly string[], members: CascadeMembers<M, R>): Promise<R> {
-  const hit = cachedMember(order, members);
+  const prepared = prepareMembers(order, members);
+  const hit = firstCached(prepared, members);
   if (hit !== undefined) return members.run(hit);
   const attempted: TtsError[] = [];
   let skipped: TtsError | undefined;
@@ -80,7 +88,8 @@ export async function walkCascade<M, R>(order: readonly string[], members: Casca
       skipped = reason;
       continue;
     }
-    const member = members.prepare(id);
+    // A member whose window closed during the walk was not prepared up front.
+    const member = prepared.get(id) ?? members.prepare(id);
     try {
       return await members.run(member);
     } catch (error) {
