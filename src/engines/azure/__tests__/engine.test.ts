@@ -49,6 +49,13 @@ describe("createAzureEngine", () => {
     expect(() => createAzureEngine({})).not.toThrow();
   });
 
+  it("azure lowercases the region", async () => {
+    const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => audio([1]));
+    const engine = createAzureEngine({ apiKey: "k", region: "WestEurope", fetch });
+    await engine.synthesize("hej", VOICE, new AbortController().signal);
+    expect(String(fetch.mock.calls[0]![0])).toBe("https://westeurope.tts.speech.microsoft.com/cognitiveservices/v1");
+  });
+
   it("azure posts ssml to the region endpoint and returns mp3", async () => {
     const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => audio([1, 2], [3]));
     const engine = createAzureEngine({ apiKey: "secret", region: "westeurope", fetch });
@@ -85,6 +92,17 @@ describe("createAzureEngine", () => {
     expect(body).not.toMatch(/a < b/);
   });
 
+  it("ssml xml:lang keeps the script subtag", async () => {
+    const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => audio([1]));
+    const engine = createAzureEngine({ apiKey: "k", region: "westeurope", fetch });
+
+    await engine.synthesize("zdravo", "sr-Latn-RS-NicholasNeural", new AbortController().signal);
+
+    expect(String(fetch.mock.calls[0]![1]?.body)).toBe(
+      "<speak version='1.0' xml:lang='sr-Latn-RS'><voice xml:lang='sr-Latn-RS' name='sr-Latn-RS-NicholasNeural'>zdravo</voice></speak>",
+    );
+  });
+
   it("429 maps to rate-limited", async () => {
     const error = await refusal(fixture("rate-limited-429"));
     expect(error.kind).toBe("rate-limited");
@@ -101,10 +119,29 @@ describe("createAzureEngine", () => {
     expect(error.status).toBe(401);
   });
 
-  it("403 maps to unauthorized", async () => {
+  it("plain 403 maps to unauthorized", async () => {
     const error = await refusal(fixture("forbidden-403"));
     expect(error.kind).toBe("unauthorized");
     expect(error.status).toBe(403);
+  });
+
+  it("403 out of call volume quota maps to quota-exhausted", async () => {
+    const error = await refusal(fixture("quota-403"));
+    expect(error.kind).toBe("quota-exhausted");
+    expect(error.status).toBe(403);
+  });
+
+  it("429 with a quota message maps to quota-exhausted", async () => {
+    const error = await refusal(fixture("quota-429"));
+    expect(error.kind).toBe("quota-exhausted");
+    expect(error.status).toBe(429);
+  });
+
+  it("quota message is read from a top-level message or a raw string body", async () => {
+    const top = await refusal({ status: 403, body: { message: "Out of call volume quota." } });
+    expect(top.kind).toBe("quota-exhausted");
+    const raw = await refusal({ status: 403, body: "Out of call volume quota." });
+    expect(raw.kind).toBe("quota-exhausted");
   });
 
   it("missing key rejects without a request", async () => {
