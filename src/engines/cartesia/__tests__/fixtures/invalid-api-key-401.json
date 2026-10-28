@@ -1,0 +1,14 @@
+{
+  "_source": [
+    "https://docs.cartesia.ai/use-the-api/api-errors.md",
+    "https://docs.cartesia.ai/examples/error-handling.md"
+  ],
+  "_verified": "the body shape (error_code nullable, title, message, request_id) is documented; the docs list no auth error_code, so `null` is used. 401 is assumed from the SDK's AuthenticationError class (the docs show no status for it); title/message are illustrative",
+  "status": 401,
+  "body": {
+    "error_code": null,
+    "title": "Invalid API key",
+    "message": "The API key provided is invalid.",
+    "request_id": "550e8400-e29b-41d4-a716-446655440002"
+  }
+}

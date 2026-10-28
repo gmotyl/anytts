@@ -1,0 +1,14 @@
+{
+  "_source": [
+    "https://docs.cartesia.ai/use-the-api/api-errors.md",
+    "https://docs.cartesia.ai/use-the-api/api-conventions.md"
+  ],
+  "_verified": "the structured HTTP error body { error_code, title, message, request_id } and error_code `quota_exceeded` (\"The account has exceeded quota (for example credits ...)\") are documented for Cartesia-Version >= 2026-03-01; the HTTP status of a quota refusal is NOT documented (402 is assumed) and the title/message text is illustrative",
+  "status": 402,
+  "body": {
+    "error_code": "quota_exceeded",
+    "title": "Quota exceeded",
+    "message": "You have run out of credits for this billing period.",
+    "request_id": "550e8400-e29b-41d4-a716-446655440001"
+  }
+}

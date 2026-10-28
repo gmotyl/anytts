@@ -1,0 +1,15 @@
+{
+  "_source": [
+    "https://docs.cartesia.ai/use-the-api/api-errors.md",
+    "https://docs.cartesia.ai/use-the-api/concurrency-limits-and-timeouts.md"
+  ],
+  "_verified": "429 Too Many Requests on exceeding the TTS concurrency limit, and this exact body (error_code `concurrency_limited`, title, message) are documented; the request_id is the docs' example; the docs do not mention a Retry-After header (unverified; the engine reads it when present)",
+  "status": 429,
+  "headers": { "retry-after": "3" },
+  "body": {
+    "error_code": "concurrency_limited",
+    "title": "Too many concurrent requests",
+    "message": "You have exceeded your plan's concurrency limit.",
+    "request_id": "550e8400-e29b-41d4-a716-446655440000"
+  }
+}

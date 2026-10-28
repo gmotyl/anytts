@@ -1,0 +1,25 @@
+{
+  "_source": [
+    "https://docs.cartesia.ai/api-reference/tts/bytes.md",
+    "https://docs.cartesia.ai/use-the-api/api-conventions.md"
+  ],
+  "_verified": "2026-10-28 against the docs above (no live call): POST https://api.cartesia.ai/tts/bytes, `Authorization: Bearer <key>`, required `Cartesia-Version` (the OpenAPI enum lists only 2026-08-14), required model_id/transcript/voice/output_format, MP3 output_format = { container: mp3, sample_rate, bit_rate } (defaults 44100 / 128000), model enum sonic-3.6 (default) | sonic-3.5 | sonic-3 | sonic-latest, optional `language` (base code or locale; never together with `locale`)",
+  "method": "POST",
+  "url": "https://api.cartesia.ai/tts/bytes",
+  "headers": {
+    "authorization": "Bearer <key>",
+    "cartesia-version": "2026-08-14",
+    "content-type": "application/json",
+    "accept": "audio/mpeg"
+  },
+  "body": {
+    "model_id": "sonic-3.6",
+    "transcript": "…",
+    "voice": "{voice_id}",
+    "output_format": { "container": "mp3", "sample_rate": 44100, "bit_rate": 128000 }
+  },
+  "_notes": [
+    "`accept: audio/mpeg` is our choice; the docs list the 200 response as `audio/*`.",
+    "`language` is added only for single-language catalog voices (see engine.ts); the docs do not say what the API does without it."
+  ]
+}

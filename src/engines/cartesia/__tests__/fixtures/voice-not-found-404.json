@@ -1,0 +1,11 @@
+{
+  "_source": "https://docs.cartesia.ai/use-the-api/api-errors.md",
+  "_verified": "error_code `voice_not_found` (\"The requested voice does not exist.\") is documented; 404 is assumed from the SDK's NotFoundError class; title/message are illustrative",
+  "status": 404,
+  "body": {
+    "error_code": "voice_not_found",
+    "title": "Voice not found",
+    "message": "The requested voice does not exist.",
+    "request_id": "550e8400-e29b-41d4-a716-446655440003"
+  }
+}
