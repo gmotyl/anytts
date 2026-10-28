@@ -173,7 +173,9 @@ is `network` (see Decisions during implementation).
 - **Cascade alias** (browser only) — `(cascade, lang, optionsHash, text)`, where `optionsHash`
   covers `voices`, `order` and `pronunciation` — otherwise changing a member's voice would keep
   answering from the old audio. The alias points at the member entry; `state` / `isCached` on a
-  cascade request read the alias; evicting the member entry evicts its aliases.
+  cascade request read the alias; evicting the member entry evicts its aliases. The member key is
+  rebuilt from the browser's pronunciation config, which may differ from the relay's: when it
+  already holds an entry, the answer is cached under the alias key alone and never overwrites it.
 - The server does not keep aliases: its lookups walk the member keys (above).
 
 ## Relay protocol
@@ -210,6 +212,10 @@ is `network` (see Decisions during implementation).
 - **Direct refusals open windows.** A `quota-exhausted` / `unauthorized` / `rate-limited` from a
   direct (non-cascade) request opens the engine's skip window too, so `engineStatus` reports it;
   the window steers the cascade only and never blocks direct requests.
+- **Recheck at slot start.** A member job that waited for its slot checks the member's skip window
+  again when it starts; one opened meanwhile (by the job ahead of it, before its slot frees) passes
+  the member over with no request, and the walk keeps that skip reason. Only when every caller of
+  the job is a cascade walk: a direct request sharing it still reaches the engine.
 - **Windows never shrink.** A later refusal does not shorten an open window or replace a longer
   one's kind.
 - **Explicit `engine: "edge"` at the relay** goes through the shared `tts` instance (its cache,

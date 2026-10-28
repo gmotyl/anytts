@@ -334,7 +334,9 @@ a non-cascade request are ignored.
    request.
 3. **Attempt.** Otherwise the member runs with its own `retries`. A member whose
    `maxConcurrent` slots are busy is waited for, not hopped over (hopping would change the voice
-   mid-answer for a momentary limit).
+   mid-answer for a momentary limit). The skip check runs again when the waiting job gets its
+   slot: if a request ahead of it opened a skip window meanwhile, the member is passed over
+   without a request (a direct request sharing that job still reaches the engine).
 4. On audio, the result is cached under the member's key and returned. `quota-exhausted`,
    `unauthorized` and `rate-limited` open a skip window and move on; transient failures after
    retries, `no-audio` and `rejected` move on without one; `unknown-voice` and an abort stop the
@@ -434,7 +436,9 @@ cross-origin deployment adds `access-control-allow-origin` and the preflight ans
 
 In the browser, point the relay clients at it; one cascade call walks the whole chain on the
 server, and the result is cached under the member's key and a cascade alias (text, `lang` and the
-request's `voices` / `order` / `pronunciation`), so changing a member's voice is a cache miss:
+request's `voices` / `order` / `pronunciation`), so changing a member's voice is a cache miss. The
+browser rebuilds that member key from its own pronunciation config, so when the key already holds
+an entry the answer is cached under the alias alone and never replaces it:
 
 ```ts
 import { createTts } from "anytts";

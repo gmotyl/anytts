@@ -13,7 +13,10 @@ export interface CascadeMembers<M, R> {
   /** Picks the member's voice and prepared text; throws (`unknown-voice`) when it cannot speak the request. */
   prepare(id: string): M;
   isCached(member: M): boolean;
-  /** Runs the member's own path: cache, then a scheduler job in its engine slot (waiting while it is busy). */
+  /**
+   * Runs the member's own path: cache, then a scheduler job in its engine slot (waiting while it is
+   * busy). Rejects `MemberSkippedError` when the member's skip window opened while its job waited.
+   */
   run(member: M): Promise<R>;
   /** A failure that moves the walk to the next member. Skip windows open here. */
   onFailure?(id: string, error: TtsError): void;
@@ -43,6 +46,17 @@ export class EmptyCascadeOrderError extends RangeError {
   constructor() {
     super("cascade request has no members to try");
     this.name = "EmptyCascadeOrderError";
+  }
+}
+
+/**
+ * A member job that reached its slot after the member's skip window opened (another request's
+ * refusal while it waited): no provider call was made. The walk counts the member as skipped.
+ */
+export class MemberSkippedError extends Error {
+  constructor(readonly reason: TtsError) {
+    super(reason.message);
+    this.name = "MemberSkippedError";
   }
 }
 
@@ -92,10 +106,11 @@ const switchesMember = (error: unknown): error is TtsError => error instanceof T
  * Walks `order` until a member speaks. Every member that may be tried is prepared first, so a voice
  * one of them cannot speak rejects before any request. Cache lookups go first, across every member
  * (a skipped one included: skip reasons only rule out requests), so a unit already synthesized
- * never costs quota. Then each member is tried in turn; a busy member is
- * waited for (its `run` holds the job in the slot queue), never hopped over. Rejects with the last
- * attempted member's error (a copy carrying the earlier attempts' errors, in order, as `cause` when
- * there were any), or the last skip reason when no member was attempted.
+ * never costs quota. Then each member is tried in turn; a busy member is waited for (its `run`
+ * holds the job in the slot queue), never hopped over, and its skip window is checked again when
+ * the job starts, so a window opened while it waited still passes it over without a request.
+ * Rejects with the last attempted member's error (a copy carrying the earlier attempts' errors, in
+ * order, as `cause` when there were any), or the last skip reason when no member was attempted.
  *
  * The first member's job is enqueued synchronously, before this returns.
  */
@@ -116,6 +131,11 @@ export async function walkCascade<M, R>(order: readonly string[], members: Casca
     try {
       return await members.run(member);
     } catch (error) {
+      // Skipped at slot start: as if passed over here, no attempt to record and no window to open.
+      if (error instanceof MemberSkippedError) {
+        skipped = error.reason;
+        continue;
+      }
       // An abort surfaces as the member path's AbortError (here, or from the next member's `run`).
       if (!switchesMember(error)) throw error;
       members.onFailure?.(id, error);

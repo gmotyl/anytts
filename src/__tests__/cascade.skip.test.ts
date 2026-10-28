@@ -242,6 +242,130 @@ describe("cascade skip windows", () => {
     expect(other.tts.engineStatus("a")).toEqual({ state: "ready" });
   });
 
+  it("a queued attempt rechecks the skip window", async () => {
+    const calls: string[] = [];
+    let refuse!: (error: unknown) => void;
+    const slow: Engine = {
+      id: "a",
+      keyed: true,
+      voices: [{ id: "a-pl", label: "a", locale: "pl-PL", gender: "male", multilingual: false }],
+      synthesize(text) {
+        calls.push(text);
+        return new Promise((_resolve, reject) => {
+          refuse = reject;
+        });
+      },
+    };
+    const b = fakeEngine("b", true);
+    const tts = createTts(
+      {
+        engines: {
+          a: { apiKey: "k", maxConcurrent: 1, voices: { pl: "a-pl" } },
+          b: { apiKey: "k", voices: { pl: "b-pl" } },
+          cascade: { order: ["a", "b"] },
+        },
+        defaultEngine: "cascade",
+        scheduler: { concurrency: 4, tiers: [{ name: "play" }] },
+      },
+      { engineFactories: { a: () => slow, b: () => b.engine }, now: () => Date.parse("2026-11-14T10:00:00.000Z") },
+    );
+    // Both pass `a`'s skip check; the second waits in `a`'s one slot behind the first.
+    const first = tts.synthesize({ text: "one", lang: "pl" });
+    const second = tts.synthesize({ text: "two", lang: "pl" });
+    await Promise.resolve();
+    expect(calls).toEqual(["one"]);
+    refuse(new TtsError("quota-exhausted"));
+    expect(await first).toMatchObject({ engine: "b" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // The window the first call opened passes `a` over for the queued one: no provider call.
+    expect(calls).toEqual(["one"]);
+    expect(await second).toMatchObject({ engine: "b" });
+    expect(b.calls).toEqual(["one", "two"]);
+  });
+
+  it("a queued attempt skipped at start keeps its skip reason as the final error", async () => {
+    let refuse!: (error: unknown) => void;
+    const calls: string[] = [];
+    const slow: Engine = {
+      id: "a",
+      keyed: true,
+      voices: [{ id: "a-pl", label: "a", locale: "pl-PL", gender: "male", multilingual: false }],
+      synthesize(text) {
+        calls.push(text);
+        return new Promise((_resolve, reject) => {
+          refuse = reject;
+        });
+      },
+    };
+    const tts = createTts(
+      {
+        engines: { a: { apiKey: "k", maxConcurrent: 1, voices: { pl: "a-pl" } }, cascade: { order: ["a"] } },
+        defaultEngine: "cascade",
+        scheduler: { concurrency: 4, tiers: [{ name: "play" }] },
+      },
+      { engineFactories: { a: () => slow }, now: () => Date.parse("2026-11-14T10:00:00.000Z") },
+    );
+    const first = tts.synthesize({ text: "one", lang: "pl" });
+    // Settles while the test waits below: handled from the start.
+    const second = tts.synthesize({ text: "two", lang: "pl" }).catch((error: unknown) => error);
+    // A direct request queued behind them still reaches the engine.
+    const direct = tts.synthesize({ text: "three", lang: "pl", engine: "a" });
+    await Promise.resolve();
+    refuse(new TtsError("unauthorized", undefined, { status: 401 }));
+    await expect(first).rejects.toMatchObject({ kind: "unauthorized", status: 401 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(calls).toEqual(["one", "three"]);
+    const skipped = await second;
+    expect(skipped).toBeInstanceOf(TtsError);
+    expect(skipped).toMatchObject({ kind: "unauthorized", message: expect.stringContaining("skipped by the cascade") });
+    refuse(new TtsError("unauthorized", undefined, { status: 401 }));
+    await expect(direct).rejects.toMatchObject({ kind: "unauthorized" });
+  });
+
+  it("a direct request joined to a queued cascade attempt still reaches the engine", async () => {
+    let refuse!: (error: unknown) => void;
+    let answer!: (bytes: ArrayBuffer) => void;
+    const calls: string[] = [];
+    const slow: Engine = {
+      id: "a",
+      keyed: true,
+      voices: [{ id: "a-pl", label: "a", locale: "pl-PL", gender: "male", multilingual: false }],
+      synthesize(text) {
+        calls.push(text);
+        return new Promise((resolve, reject) => {
+          refuse = reject;
+          answer = resolve;
+        });
+      },
+    };
+    const b = fakeEngine("b", true);
+    const tts = createTts(
+      {
+        engines: {
+          a: { apiKey: "k", maxConcurrent: 1, voices: { pl: "a-pl" } },
+          b: { apiKey: "k", voices: { pl: "b-pl" } },
+          cascade: { order: ["a", "b"] },
+        },
+        defaultEngine: "cascade",
+        scheduler: { concurrency: 4, tiers: [{ name: "play" }] },
+      },
+      { engineFactories: { a: () => slow, b: () => b.engine }, now: () => Date.parse("2026-11-14T10:00:00.000Z") },
+    );
+    const first = tts.synthesize({ text: "one", lang: "pl" });
+    const second = tts.synthesize({ text: "two", lang: "pl" });
+    // Same unit as the queued cascade attempt: joins its job.
+    const direct = tts.synthesize({ text: "two", lang: "pl", engine: "a" });
+    await Promise.resolve();
+    refuse(new TtsError("quota-exhausted"));
+    expect(await first).toMatchObject({ engine: "b" });
+    await Promise.resolve();
+    expect(calls).toEqual(["one", "two"]);
+    answer(new Uint8Array([2]).buffer);
+    expect(await direct).toMatchObject({ engine: "a" });
+    // The cascade caller riding on that job is served by it.
+    expect(await second).toMatchObject({ engine: "a" });
+  });
+
   it("a member without a key reports no-key", () => {
     const { tts } = setup({ a: {}, b: { apiKey: "" }, edge: {}, cascade: { order: ["a", "b", "edge"] } });
     expect(tts.engineStatus("a")).toEqual({ state: "no-key" });

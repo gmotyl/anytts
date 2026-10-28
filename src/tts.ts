@@ -1,5 +1,5 @@
 import { LruCache } from "./cache.js";
-import { CASCADE, cachedMember, cascadeMembers, effectiveOrder, walkCascade, type CascadeMembers } from "./cascade.js";
+import { CASCADE, cachedMember, cascadeMembers, effectiveOrder, MemberSkippedError, walkCascade, type CascadeMembers } from "./cascade.js";
 import type { Engine, EngineHooks, VoiceMap } from "./engine.js";
 import { createEdgeEngine, type EdgeEngineOptions } from "./engines/edge/engine.js";
 import { createRelayCascade, RELAY_ENGINES, type RelayCascade } from "./engines/relayEngine.js";
@@ -193,6 +193,8 @@ interface InFlight {
   job: ScheduledJob<SynthesisResult>;
   controller: AbortController;
   callers: number;
+  /** Callers that are not a cascade walk; while there are none, a skip window open at start cancels the job. */
+  direct: number;
   phases: Phases;
 }
 
@@ -358,7 +360,8 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
   /**
    * A browser cascade request: one relay call, keyed by the Cascade alias `(cascade, lang,
    * optionsHash, text)`. Its result is cached under the member key the relay names (built as a
-   * direct request to that member would build it) and the alias points at that entry.
+   * direct request to that member would build it) and the alias points at that entry; when that
+   * member key already holds an entry, the result is cached under the alias key alone instead.
    */
   const resolveRelayCascade = (req: SynthesisRequest): Resolved => {
     // One voice id cannot name voices of several engines.
@@ -383,6 +386,12 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
       store: (result) => {
         const pronounce = req.pronunciation && Object.hasOwn(req.pronunciation, result.engine) ? req.pronunciation[result.engine] : undefined;
         const member = memberKey(result.engine, result.voice, prepareText(result.engine, req, pronounce));
+        // The rebuilt key guesses the relay's prepared text (its pronunciation config may differ), so
+        // another answer may already sit there: never overwrite it, keep this one under the alias key.
+        if (cache.has(member)) {
+          cache.set(key, result);
+          return;
+        }
         cache.set(member, result);
         cache.alias(key, member);
       },
@@ -429,7 +438,8 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
 
   /**
    * Opens the engine's skip window for a quota, auth or rate-limit failure, from a cascade attempt
-   * or a direct request; other kinds open none.
+   * or a direct request; other kinds open none. Called from the job itself, before its slot frees,
+   * so a job queued behind it in the same slot sees the window when it starts.
    */
   const onFailure = (id: string, error: TtsError): void => {
     const at = now();
@@ -455,7 +465,6 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     run: (r: Resolved) => Promise<SynthesisResult> = () => Promise.reject(new Error("not runnable")),
   ): CascadeMembers<Resolved, SynthesisResult> => ({
     skipReason,
-    onFailure,
     prepare: (id) =>
       resolveEngine(
         id,
@@ -503,14 +512,26 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     const controller = new AbortController();
     // Created before enqueue: a free slot may run the job synchronously.
     const phases = newPhases();
+    // Unset while `enqueue` runs: a job started synchronously was enqueued right after the cascade's own skip check.
+    let flight: InFlight | undefined;
     const job = scheduler.enqueue(tier, async () => {
+      // Only cascade walks wait on this job: a window opened while it was queued passes the member over.
+      const skipped = flight !== undefined && flight.direct === 0 && engines.has(r.engineId) ? skipReason(r.engineId) : undefined;
+      if (skipped) throw new MemberSkippedError(skipped);
       reach(phases, "started");
-      const result = await attempt(r, controller.signal, phases);
+      let result: SynthesisResult;
+      try {
+        result = await attempt(r, controller.signal, phases);
+      } catch (error) {
+        // Before the slot frees. The browser cascade's relay keeps its own windows: it opens none here.
+        if (error instanceof TtsError && engines.has(r.engineId)) onFailure(r.engineId, error);
+        throw error;
+      }
       // Only a job still owned by callers stores its result.
       if (!controller.signal.aborted) r.store(result);
       return result;
     }, r.engineId);
-    const flight: InFlight = { job, controller, callers: 0, phases };
+    flight = { job, controller, callers: 0, direct: 0, phases };
     inFlight.set(r.key, flight);
     emit({ type: "pending", key: r.key });
     const release = () => settle(r.key, flight);
@@ -534,11 +555,8 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     } catch (error) {
       return Promise.reject(error);
     }
-    return synthesizeResolved(r, req).catch((error: unknown) => {
-      // A direct refusal opens the engine's skip window too, so `engineStatus` reports it.
-      if (error instanceof TtsError) onFailure(r.engineId, error);
-      throw error;
-    });
+    // A direct refusal opens the engine's skip window too (in the job), so `engineStatus` reports it.
+    return synthesizeResolved(r, req);
   };
 
   /**
@@ -571,13 +589,14 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
         req.onFirstByte!();
       }),
     };
-    return walkCascade(order, cascadeMembersFor(req, (r) => synthesizeResolved(r, memberReq))).catch((error: unknown) => {
+    return walkCascade(order, cascadeMembersFor(req, (r) => synthesizeResolved(r, memberReq, true))).catch((error: unknown) => {
       // An abort that lands while a member's failure is on its way to the caller still wins.
       throw req.signal?.aborted && error instanceof TtsError ? abortError() : error;
     });
   };
 
-  const synthesizeResolved = (r: Resolved, req: SynthesisRequest): Promise<SynthesisResult> => {
+  /** `viaCascade`: the caller is a cascade walk, which a skip window opened before the job starts turns away. */
+  const synthesizeResolved = (r: Resolved, req: SynthesisRequest, viaCascade = false): Promise<SynthesisResult> => {
     const { signal } = req;
     if (signal?.aborted) return Promise.reject(abortError());
     const hit = cache.get(r.key);
@@ -601,6 +620,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
       return Promise.reject(error);
     }
     flight.callers++;
+    if (!viaCascade) flight.direct++;
     const joined = flight;
     const listener = listen(joined.phases, req);
 
@@ -611,6 +631,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
         settled = true;
         joined.phases.listeners.delete(listener);
         joined.callers--;
+        if (!viaCascade) joined.direct--;
         if (joined.callers === 0) {
           // Nobody is waiting any more: drop the queued job or stop the running one.
           settle(r.key, joined);
