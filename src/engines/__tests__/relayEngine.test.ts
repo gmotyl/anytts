@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TtsError } from "../../errors.js";
 import { createTts, type TtsConfig } from "../../tts.js";
 import { ELEVENLABS_VOICE_MAP } from "../elevenlabs/voices.js";
-import { createRelayEngine } from "../relayEngine.js";
+import { createRelayCascade, createRelayEngine } from "../relayEngine.js";
 
 const RELAY = "https://relay.test/tts";
 const AUDIO = new Uint8Array([0x49, 0x44, 0x33, 1, 2, 3]);
@@ -107,6 +107,68 @@ describe("browser relay clients", () => {
     }
     // A keyed relay client's refusal shows in its status, as a direct engine's would.
     expect(tts.engineStatus("elevenlabs").state).toBe("unauthorized");
+  });
+
+  it("a relay error body's retryAfter stands without a Retry-After header", async () => {
+    stubRelay(() => Response.json({ kind: "rate-limited", retryAfter: 12 }, { status: 502 }));
+    const tts = createTts({ engines: { cascade: { relayUrl: RELAY } }, defaultEngine: "cascade", scheduler });
+    const error = await rejection(tts.synthesize({ text: "Hi", lang: "pl" }));
+    expect(error.kind).toBe("rate-limited");
+    expect(error.retryAfter).toBe(12);
+  });
+
+  it("a browser cascade does not retry the relay walk unless configured to", async () => {
+    // `network` is transient: a direct engine would retry it once.
+    const fetchMock = stubRelay(() => Response.json({ kind: "network" }, { status: 502 }));
+    const tts = createTts({ engines: { cascade: { relayUrl: RELAY } }, defaultEngine: "cascade", scheduler });
+    expect((await rejection(tts.synthesize({ text: "Hi", lang: "pl" }))).kind).toBe("network");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // An explicit `retries` still applies.
+    fetchMock.mockClear();
+    const retrying = createTts({ engines: { cascade: { relayUrl: RELAY, retries: 1 } }, defaultEngine: "cascade", scheduler });
+    expect((await rejection(retrying.synthesize({ text: "Hi", lang: "pl" }))).kind).toBe("network");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("a cascade relay answer that names no engine or voice is rejected", async () => {
+    const bare = (headers: Record<string, string>) =>
+      new Response(AUDIO, { status: 200, headers: { "content-type": "audio/mpeg", ...headers } });
+    const cases: Record<string, string>[] = [{}, { "x-anytts-engine": "azure" }, { "x-anytts-voice": "pl-PL-MarekNeural" }];
+    for (const [i, headers] of cases.entries()) {
+      stubRelay(() => bare(headers));
+      const tts = createTts({ engines: { cascade: { relayUrl: RELAY } }, defaultEngine: "cascade", scheduler });
+      expect((await rejection(tts.synthesize({ text: `Hi ${i}`, lang: "pl" }))).kind).toBe("rejected");
+    }
+  });
+
+  it("a cascade relay client waits 20000 ms for the headers by default", async () => {
+    vi.useFakeTimers();
+    try {
+      // The relay never answers; the fetch honours its abort signal.
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          (_url: string | URL | Request, init?: RequestInit) =>
+            new Promise<Response>((_resolve, reject) => {
+              init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+            }),
+        ),
+      );
+      let error: unknown;
+      createRelayCascade({ relayUrl: RELAY })
+        .synthesize({ text: "Hi" }, new AbortController().signal)
+        .catch((e: unknown) => {
+          error = e;
+        });
+      await vi.advanceTimersByTimeAsync(19999);
+      expect(error).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(error).toBeInstanceOf(TtsError);
+      expect((error as TtsError).kind).toBe("first-byte-timeout");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("no key reaches the browser", async () => {

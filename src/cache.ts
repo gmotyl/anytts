@@ -49,12 +49,13 @@ export class LruCache<V> {
   }
 
   set(key: string, value: V): void {
-    // A real entry replaces an alias under the same key.
-    this.unlink(key);
+    // A real entry replaces an alias under the same key: the alias is reported evicted first.
+    const wasAlias = this.unlink(key);
     const existed = this.entries.delete(key);
     this.entries.set(key, value);
     // Settle the entries before notifying, so listeners always see a cache within `max`.
-    const events: CacheEvent[] = existed ? [] : [{ type: "add", key }];
+    const events: CacheEvent[] = wasAlias ? [{ type: "evict", key }] : [];
+    if (!existed) events.push({ type: "add", key });
     while (this.entries.size > this.max) {
       const oldest = this.entries.keys().next().value as string;
       this.entries.delete(oldest);

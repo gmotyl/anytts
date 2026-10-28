@@ -100,6 +100,12 @@ async function readCapped(req: Request, cap: number): Promise<string | undefined
 const json = (status: number, body: { kind?: TtsErrorKind; retryAfter?: number; error?: string }, headers?: HeadersInit) =>
   Response.json(body, { status, ...(headers ? { headers } : {}) });
 
+/**
+ * Cross-origin browsers read only CORS-safelisted response headers unless the server names the
+ * others: the cascade client needs the engine/voice headers, an error the `Retry-After`.
+ */
+const EXPOSE_HEADERS = { "access-control-expose-headers": "x-anytts-engine, x-anytts-voice, retry-after" };
+
 const audio = (bytes: ArrayBuffer, engine: string, voice: string) =>
   new Response(bytes, {
     status: 200,
@@ -108,6 +114,7 @@ const audio = (bytes: ArrayBuffer, engine: string, voice: string) =>
       "content-length": String(bytes.byteLength),
       "x-anytts-engine": engine,
       "x-anytts-voice": voice,
+      ...EXPOSE_HEADERS,
     },
   });
 
@@ -119,7 +126,7 @@ function failure(error: unknown): Response {
   }
   const { kind, retryAfter } = error;
   if (retryAfter === undefined) return json(502, { kind });
-  const headers = kind === "rate-limited" ? { "retry-after": String(Math.max(0, Math.ceil(retryAfter))) } : undefined;
+  const headers = kind === "rate-limited" ? { "retry-after": String(Math.max(0, Math.ceil(retryAfter))), ...EXPOSE_HEADERS } : undefined;
   return json(502, { kind, retryAfter }, headers);
 }
 

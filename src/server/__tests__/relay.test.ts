@@ -215,6 +215,24 @@ describe("relay serves every engine", () => {
     expect(azure.synthesize).toHaveBeenCalledTimes(1);
   });
 
+  it("exposes the engine, voice and Retry-After headers to cross-origin browsers", async () => {
+    const exposed = (res: Response) =>
+      (res.headers.get("access-control-expose-headers") ?? "").split(",").map((h) => h.trim().toLowerCase());
+    const { engine } = fakeEngine();
+    const { elevenlabs, tts } = keyedSetup();
+    const handler = createRelayHandlerWith(engine, { tts });
+
+    const ok = await handler(post({ engine: "cascade", text: "Cześć", lang: "pl" }));
+    expect(ok.status).toBe(200);
+    expect(exposed(ok)).toEqual(expect.arrayContaining(["x-anytts-engine", "x-anytts-voice"]));
+
+    elevenlabs.fail(() => new TtsError("rate-limited", "slow down", { status: 429, retryAfter: 42 }));
+    const limited = await handler(post({ engine: "elevenlabs", text: "Hi", voice: "elevenlabs-pl" }));
+    expect(limited.status).toBe(502);
+    expect(limited.headers.get("retry-after")).toBe("42");
+    expect(exposed(limited)).toContain("retry-after");
+  });
+
   it("unknown engine answers unknown-voice", async () => {
     const { engine, synthesize } = fakeEngine();
     const { elevenlabs, azure, tts } = keyedSetup();

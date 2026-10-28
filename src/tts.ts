@@ -68,10 +68,18 @@ export type CascadeConfig = { order: string[] } | CascadeRelayConfig;
 export interface CascadeRelayConfig {
   /** The relay endpoint (`createRelayHandler` from `anytts/server`). */
   relayUrl: string;
-  /** Max wait for the relay's response headers (it answers once a member has spoken). Default 20000. */
+  /**
+   * Max wait for the relay's response headers (it answers once a member has spoken). Default 20000;
+   * it must cover the relay's worst-case member walk, or a walk that would succeed is cut off.
+   */
   firstByteMs?: number;
   /** Max gap between body chunks. Default 8000. */
   stallMs?: number;
+  /**
+   * Extra relay calls after a transient failure. Default 0: each call re-runs the relay's whole
+   * member walk (and spends each member's quota again).
+   */
+  retries?: number;
 }
 
 export interface TtsConfig {
@@ -307,10 +315,6 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     if (!cache.has(key)) emit({ type: "drop", key });
   };
 
-  /**
-   * Throws RangeError for an unconfigured engine and `unknown-voice` for a voice outside its catalog.
-   * `pronounce` overrides the engine's `pronunciation` setting (a cascade request's per-member flag).
-   */
   /** The text engine `engineId` speaks for `req`: respelled when its pronunciation is on and `lang` is given. */
   const prepareText = (engineId: string, req: SynthesisRequest, pronounceOverride?: boolean): string => {
     const pronounce = pronounceOverride ?? engines.get(engineId)?.config.pronunciation ?? engineId === "edge";
@@ -320,6 +324,10 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
   // Built on the prepared text, so the same request text with and without a map never collides.
   const memberKey = (engineId: string, voice: string, text: string): string => JSON.stringify([engineId, voice, text]);
 
+  /**
+   * Throws RangeError for an unconfigured engine and `unknown-voice` for a voice outside its catalog.
+   * `pronounce` overrides the engine's `pronunciation` setting (a cascade request's per-member flag).
+   */
   const resolveEngine = (engineId: string, req: SynthesisRequest, voiceOverride?: string, pronounceOverride?: boolean): Resolved => {
     const entry = engines.get(engineId);
     if (!entry) throw new UnknownEngineError(engineId);
@@ -365,7 +373,9 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     };
     return {
       engineId: CASCADE,
-      retries: typeof cascadeConfig!.retries === "number" ? cascadeConfig!.retries : DEFAULT_RETRIES,
+      // One relay call is a whole member walk: retrying it re-spends every member it tried, so the
+      // browser cascade does not retry unless its config says so.
+      retries: typeof cascadeConfig!.retries === "number" ? cascadeConfig!.retries : 0,
       voice: "",
       text: req.text,
       key,
