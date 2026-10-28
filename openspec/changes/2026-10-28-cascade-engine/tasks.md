@@ -35,9 +35,9 @@ class TtsError { readonly retryAfter?: number }
 - "rate-limited carries retryAfter"
 - "refusal kinds are not transient"
 
-- [ ] **Step 1: Write the failing tests** — Run: `corepack pnpm exec vitest run src/__tests__/errors.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: same — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/errors.ts src/__tests__/errors.test.ts && git commit -m "feat(errors): quota-exhausted, unauthorized, rate-limited kinds"`
+- [x] **Step 1: Write the failing tests** — Run: `corepack pnpm exec vitest run src/__tests__/errors.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: same — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/errors.ts src/__tests__/errors.test.ts && git commit -m "feat(errors): quota-exhausted, unauthorized, rate-limited kinds"`
 
 ### Task 2: Per-engine pronunciation inside the library
 
@@ -64,9 +64,9 @@ interface TtsConfig { /* existing */ pronunciation?: Record<string, Pronunciatio
 - "no lang, no map"
 - "pronunciation on and off do not share an entry"
 
-- [ ] **Step 1: Write the failing tests** — Run: `corepack pnpm exec vitest run src/__tests__/tts.pronunciation.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: same, then `corepack pnpm test` — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat(tts): apply the Pronunciation map per engine"`
+- [x] **Step 1: Write the failing tests** — Run: `corepack pnpm exec vitest run src/__tests__/tts.pronunciation.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: same, then `corepack pnpm test` — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat(tts): apply the Pronunciation map per engine"`
 
 ### Task 3: Engine slots (`maxConcurrent`)
 
