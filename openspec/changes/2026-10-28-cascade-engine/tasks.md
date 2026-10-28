@@ -342,4 +342,4 @@ interface RelayHandlerOptions { maxChars?: number; authorize?: (req: Request) =>
 
 - [x] **Step 1: Docs, probe and version bump** — Run: the command above — Expected: green
 - [x] **Step 2: Commit** — `git commit -am "docs: keyed engines and cascade; release prep"`
-- [ ] **Step 3: Push the branch and open a PR to `main`** — release follows the repo's tag flow (staged publish, approved by the owner).
+- [x] **Step 3: Push the branch and open a PR to `main`** — release follows the repo's tag flow (staged publish, approved by the owner).
