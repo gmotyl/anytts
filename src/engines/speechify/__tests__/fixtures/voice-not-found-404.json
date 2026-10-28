@@ -1,0 +1,12 @@
+{
+  "_source": "https://docs.speechify.ai/build/api-reference/overview.md",
+  "_verified": "body verbatim from the overview's error-envelope example; the voice_not_found code is documented, the 404 status pairing is assumed (the example names no status)",
+  "status": 404,
+  "body": {
+    "error": {
+      "code": "voice_not_found",
+      "message": "Voice 'voice_demo0001' does not exist."
+    },
+    "request_id": "7f3a2c1b4d5e6f7a"
+  }
+}
