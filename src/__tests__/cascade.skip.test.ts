@@ -142,6 +142,66 @@ describe("cascade skip windows", () => {
     expect(fake("b").calls).toHaveLength(1);
   });
 
+  it("a cached member answers even while it is skipped", async () => {
+    const { tts, fake, speak } = setup();
+    const req = { text: "y", lang: "pl" };
+    expect(await tts.synthesize(req)).toMatchObject({ engine: "a" });
+    fake("a").fail(() => new TtsError("quota-exhausted"));
+    await speak();
+    expect(tts.engineStatus("a")).toMatchObject({ state: "quota-exhausted" });
+    expect(tts.state(req)).toBe("ready");
+    expect(tts.isCached(req)).toBe(true);
+    expect(await tts.synthesize(req)).toMatchObject({ engine: "a", voice: "a-pl" });
+    expect(fake("a").calls).toHaveLength(2);
+    // `b` answered only the request that opened `a`'s window.
+    expect(fake("b").calls).toHaveLength(1);
+  });
+
+  it("a cached member answers even without a key", async () => {
+    const { tts, fake } = setup({ a: {}, b: { apiKey: "k" }, cascade: { order: ["a", "b"] } });
+    const req = { text: "y", lang: "pl" };
+    // A direct request reaches the engine whatever its key; its result lands in the cache.
+    await tts.synthesize({ ...req, engine: "a" });
+    expect(tts.state(req)).toBe("ready");
+    expect(tts.isCached(req)).toBe(true);
+    expect(await tts.synthesize(req)).toMatchObject({ engine: "a" });
+    expect(fake("a").calls).toHaveLength(1);
+    expect(fake("b").calls).toHaveLength(0);
+  });
+
+  it("a skipped member's bad voice only means no cache hit", async () => {
+    const { tts, fake } = setup({ a: {}, b: { apiKey: "k" }, cascade: { order: ["a", "b"] } });
+    const req = { text: "y", lang: "pl", voices: { a: "nope" } };
+    expect(tts.isCached(req)).toBe(false);
+    expect(await tts.synthesize(req)).toMatchObject({ engine: "b" });
+    expect(fake("a").calls).toHaveLength(0);
+  });
+
+  it("a direct refusal opens the window engineStatus reports", async () => {
+    const { tts, fake, speak } = setup();
+    fake("a").fail(() => new TtsError("quota-exhausted"));
+    await expect(tts.synthesize({ text: "d", lang: "pl", engine: "a" })).rejects.toMatchObject({ kind: "quota-exhausted" });
+    expect(tts.engineStatus("a")).toEqual({ state: "quota-exhausted", until: "2026-12-01T00:00:00.000Z" });
+    // The cascade now passes `a` over.
+    expect(await speak()).toMatchObject({ engine: "b" });
+    expect(fake("a").calls).toHaveLength(1);
+    // A later direct request still reaches the engine.
+    fake("a").fail(undefined);
+    expect(await tts.synthesize({ text: "d2", lang: "pl", engine: "a" })).toMatchObject({ engine: "a" });
+    expect(fake("a").calls).toHaveLength(2);
+    // Rate-limited and unauthorized open theirs too; other kinds none.
+    fake("b").fail(() => new TtsError("rate-limited", undefined, { status: 429, retryAfter: 5 }));
+    await expect(tts.synthesize({ text: "d3", lang: "pl", engine: "b" })).rejects.toMatchObject({ kind: "rate-limited" });
+    expect(tts.engineStatus("b")).toMatchObject({ state: "rate-limited" });
+    fake("edge").fail(() => new TtsError("unauthorized", undefined, { status: 401 }));
+    await expect(tts.synthesize({ text: "d4", lang: "pl", engine: "edge" })).rejects.toMatchObject({ kind: "unauthorized" });
+    expect(tts.engineStatus("edge")).toEqual({ state: "unauthorized" });
+    const other = setup();
+    other.fake("a").fail(() => new TtsError("rejected"));
+    await expect(other.tts.synthesize({ text: "d", lang: "pl", engine: "a" })).rejects.toMatchObject({ kind: "rejected" });
+    expect(other.tts.engineStatus("a")).toEqual({ state: "ready" });
+  });
+
   it("a member without a key reports no-key", () => {
     const { tts } = setup({ a: {}, b: { apiKey: "" }, edge: {}, cascade: { order: ["a", "b", "edge"] } });
     expect(tts.engineStatus("a")).toEqual({ state: "no-key" });

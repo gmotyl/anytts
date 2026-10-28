@@ -43,12 +43,23 @@ export function effectiveOrder(members: readonly string[], requested?: readonly 
 }
 
 /**
- * Prepares every member in `order` that may be tried, so a voice no member can speak rejects
- * (`unknown-voice`) before any request is spent.
+ * Prepares every member in `order`, so a voice a member that may be tried cannot speak rejects
+ * (`unknown-voice`) before any request is spent. A skipped member is prepared too, for its cache
+ * entry only: one that cannot speak the request is left out, since it will not be tried.
  */
 function prepareMembers<M, R>(order: readonly string[], members: CascadeMembers<M, R>): Map<string, M> {
   const prepared = new Map<string, M>();
-  for (const id of order) if (!members.skipReason(id)) prepared.set(id, members.prepare(id));
+  for (const id of order) {
+    if (!members.skipReason(id)) {
+      prepared.set(id, members.prepare(id));
+      continue;
+    }
+    try {
+      prepared.set(id, members.prepare(id));
+    } catch {
+      // No cache hit from this member, and no attempt either.
+    }
+  }
   return prepared;
 }
 
@@ -56,7 +67,7 @@ const firstCached = <M, R>(prepared: Map<string, M>, members: CascadeMembers<M, 
   [...prepared.values()].find((member) => members.isCached(member));
 
 /**
- * The first member, in `order`, that may be tried and already holds a cached result. Throws
+ * The first member, in `order`, that already holds a cached result, skipped or not. Throws
  * `unknown-voice` when a member that may be tried cannot speak the request, as the walk would.
  */
 export function cachedMember<M, R>(order: readonly string[], members: CascadeMembers<M, R>): M | undefined {
@@ -68,8 +79,9 @@ const switchesMember = (error: unknown): error is TtsError => error instanceof T
 
 /**
  * Walks `order` until a member speaks. Every member that may be tried is prepared first, so a voice
- * one of them cannot speak rejects before any request. Cache lookups go first, across every member, so a unit
- * already synthesized never costs quota. Then each member is tried in turn; a busy member is
+ * one of them cannot speak rejects before any request. Cache lookups go first, across every member
+ * (a skipped one included: skip reasons only rule out requests), so a unit already synthesized
+ * never costs quota. Then each member is tried in turn; a busy member is
  * waited for (its `run` holds the job in the slot queue), never hopped over. Rejects with the last
  * attempted member's error (a copy carrying the earlier attempts' errors, in order, as `cause` when
  * there were any), or the last skip reason when no member was attempted.
@@ -88,7 +100,7 @@ export async function walkCascade<M, R>(order: readonly string[], members: Casca
       skipped = reason;
       continue;
     }
-    // A member whose window closed during the walk was not prepared up front.
+    // A member skipped up front whose window closed during the walk may not have been prepared.
     const member = prepared.get(id) ?? members.prepare(id);
     try {
       return await members.run(member);

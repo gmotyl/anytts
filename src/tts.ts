@@ -99,6 +99,9 @@ export interface Tts {
    * A member's standing for the cascade: `no-key` for a keyed engine without an `apiKey`, else the
    * kind of the skip window it sits in (`until` is when it closes, absent for `unauthorized`, which
    * lasts the instance's life), else `ready`. Throws RangeError for an id that is not a configured engine.
+   * A quota, rate-limit or auth refusal opens the window whether it came from a cascade attempt or a
+   * direct request to the engine; the window steers the cascade only, so direct requests still reach
+   * the engine. A skipped member's cached results still answer cascade requests.
    */
   engineStatus(id: string): EngineStatus;
 }
@@ -318,7 +321,10 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     return window;
   };
 
-  /** A keyed engine without an `apiKey`, or one inside a skip window, is passed over by the cascade, never asked. */
+  /**
+   * A keyed engine without an `apiKey`, or one inside a skip window, is passed over by the cascade,
+   * never asked; its cached results still answer.
+   */
   const skipReason = (id: string): TtsError | undefined => {
     if (hasNoKey(id)) return new TtsError("unauthorized", `${id} has no key: skipped by the cascade`);
     const window = openWindow(id);
@@ -327,7 +333,10 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     return new TtsError(window.kind, `${id} is skipped by the cascade ${span} (${window.kind})`);
   };
 
-  /** Opens the member's skip window for a quota, auth or rate-limit failure; other kinds open none. */
+  /**
+   * Opens the engine's skip window for a quota, auth or rate-limit failure, from a cascade attempt
+   * or a direct request; other kinds open none.
+   */
   const onFailure = (id: string, error: TtsError): void => {
     const at = now();
     let until: number;
@@ -422,7 +431,11 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     } catch (error) {
       return Promise.reject(error);
     }
-    return synthesizeResolved(r, req);
+    return synthesizeResolved(r, req).catch((error: unknown) => {
+      // A direct refusal opens the engine's skip window too, so `engineStatus` reports it.
+      if (error instanceof TtsError) onFailure(r.engineId, error);
+      throw error;
+    });
   };
 
   /**
