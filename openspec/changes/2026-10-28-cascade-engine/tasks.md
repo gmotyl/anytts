@@ -191,9 +191,9 @@ interface TtsConfig { /* existing */ pronunciation?: Record<string, Pronunciatio
 - "cascade has no catalog"
 - "main entry ships no keyed engine code"
 
-- [ ] **Step 1: Write the failing tests** — Run: `corepack pnpm exec vitest run src/engines/__tests__/registry.test.ts && corepack pnpm test` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: same — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat: register keyed engines from anytts/server"`
+- [x] **Step 1: Write the failing tests** — Run: `corepack pnpm exec vitest run src/engines/__tests__/registry.test.ts && corepack pnpm test` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: same — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat: register keyed engines from anytts/server"`
 
 ### Task 9: The cascade walk
 
