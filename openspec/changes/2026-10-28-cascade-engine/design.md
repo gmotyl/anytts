@@ -197,7 +197,11 @@ is `network` (see Decisions during implementation).
 - `cascade` and each keyed engine accept only `{ relayUrl, firstByteMs? }` in the browser and POST
   the request to it; `engine`/`voice` in the result come from the response headers.
 - A cascade result is cached under the member key from the headers **and** the cascade alias.
-- Relay errors keep their kind and `retryAfter`; the normal retry rules apply.
+- Relay errors keep their kind and `retryAfter`. Keyed relay clients follow the normal retry
+  rules; the browser cascade defaults to `retries: 0` (a retry re-runs the relay's whole member
+  walk), and its `firstByteMs` (default 20000) must cover the relay's worst-case walk.
+- The relay sends `access-control-expose-headers: x-anytts-engine, x-anytts-voice, retry-after`
+  on the `200` and the `502` with `Retry-After`, so cross-origin browsers can read them.
 
 ## Decisions during implementation
 

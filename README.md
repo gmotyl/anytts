@@ -102,6 +102,9 @@ throwing). `subscribe` listeners (type `TtsListener`, exported alongside `TtsEve
 it leaves the map without a result (a final failure or abandonment), and `evict` when the LRU
 removes a cached result, as before. Joins and retries are silent: a second caller joining an
 in-flight key, a waiting job being promoted, or a transient failure being retried emits nothing.
+A browser [cascade](#relay-protocol) result also adds an alias key, a 4-element JSON array
+`["cascade", lang, optionsHash, text]` pointing at the member's entry; it is evicted with that
+entry, and `set` over an alias key reports the alias `evict` before the entry's `add`.
 
 ```ts
 const req = { text: "Trzecie zdanie.", lang: "pl" };
@@ -188,7 +191,8 @@ createServer(toNodeHandler(relay)).listen(3000);
 
 `createRelayHandler` returns `(req: Request) => Promise<Response>`, so Fetch-based runtimes and
 route handlers can use it as is; `toNodeHandler` adapts it to `node:http` / Express
-`(req, res)`. Errors come back as JSON (`400`, `403`, `413`, or `502` with `{ kind }`); the full
+`(req, res)`. Errors come back as JSON (`400`, `403`, `413`, or `502` with `{ kind }` or
+`{ error }`); the full
 protocol, including keyed engines and the cascade, is under [Relay protocol](#relay-protocol).
 
 Point the browser engine at it:
@@ -419,7 +423,14 @@ exhausted free tier answers with a quota error the cascade skips instead of a bi
 - `403` — `authorize` said no. `405` — not a `POST`.
 - `413` — the body or `text` is too long.
 - `502 { kind, retryAfter? }` — the synthesis failed; `rate-limited` with a known wait also sets
-  a `Retry-After` header (in seconds).
+  a `Retry-After` header (in seconds). A failure that is not a `TtsError` (the client went away,
+  an unexpected error) answers `502 { error: "synthesis failed" }`, which the browser reads as
+  `network`.
+
+The `200` and the `502` with `Retry-After` send `access-control-expose-headers: x-anytts-engine,
+x-anytts-voice, retry-after`, so a cross-origin browser can read them (the browser cascade rejects
+an answer whose engine/voice headers it cannot see). The relay sets no other CORS headers: a
+cross-origin deployment adds `access-control-allow-origin` and the preflight answer itself.
 
 In the browser, point the relay clients at it; one cascade call walks the whole chain on the
 server, and the result is cached under the member's key and a cascade alias (text, `lang` and the
@@ -440,7 +451,19 @@ const tts = createTts({
 const { engine, voice } = await tts.synthesize({ text: "Cześć!", lang: "pl" }); // from the response headers
 ```
 
-Relay errors keep their `kind` and `retryAfter` in the browser, and the normal retry rules apply.
+Relay errors keep their `kind` and `retryAfter` in the browser. A keyed relay client follows the
+normal retry rules, and the relay's refusals open its skip windows as a direct engine's would
+(`quota-exhausted` / `rate-limited` for their window, `unauthorized` for the instance's life).
+
+The browser cascade does **not** retry by default (`retries: 0`): one relay call is the whole
+member walk, so a retry would re-run it and spend each member again. An explicit `retries` on
+`engines.cascade` still applies. Its `firstByteMs` (default 20000) must cover the relay's
+worst-case walk (each member's own `firstByteMs` plus retries, in order); a shorter one aborts a
+walk that would have succeeded.
+
+The browser builds the member key with **its own** pronunciation config (`pronunciation` entries
+and each engine's `pronunciation` flag), not the relay's. Keep the browser and relay pronunciation
+configs the same, or a later direct request to that member misses the cached cascade result.
 
 ## Errors
 
