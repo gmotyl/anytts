@@ -35,10 +35,21 @@ export function cascadeMembers(config: Record<string, unknown>, configured: (id:
   return [...new Set(order)];
 }
 
+/**
+ * A cascade request whose effective `order` holds no member: a caller mistake, not a synthesis
+ * failure. Still a `RangeError`; its own class lets the relay answer 400.
+ */
+export class EmptyCascadeOrderError extends RangeError {
+  constructor() {
+    super("cascade request has no members to try");
+    this.name = "EmptyCascadeOrderError";
+  }
+}
+
 /** The request's `order` narrowed to members (non-members dropped), else every member; never empty. */
 export function effectiveOrder(members: readonly string[], requested?: readonly string[]): string[] {
   const order = requested === undefined ? [...members] : [...new Set(requested)].filter((id) => members.includes(id));
-  if (order.length === 0) throw new RangeError("cascade request has no members to try");
+  if (order.length === 0) throw new EmptyCascadeOrderError();
   return order;
 }
 
@@ -112,7 +123,7 @@ export async function walkCascade<M, R>(order: readonly string[], members: Casca
     }
   }
   const last = attempted.at(-1);
-  if (last === undefined) throw skipped ?? new RangeError("cascade request has no members to try");
+  if (last === undefined) throw skipped ?? new EmptyCascadeOrderError();
   if (attempted.length === 1) throw last;
   // A copy: the member's own error may be shared with other callers of the same job.
   throw new TtsError(last.kind, last.message, {

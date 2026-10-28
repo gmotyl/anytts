@@ -1,3 +1,4 @@
+import { EmptyCascadeOrderError } from "../cascade.js";
 import type { Engine } from "../engine.js";
 import type { EdgeEngineOptions } from "../engines/edge/engine.js";
 import { TtsError, UnknownEngineError, type TtsErrorKind } from "../errors.js";
@@ -195,10 +196,12 @@ export function createRelayHandlerWith(
       return audio(result.bytes, result.engine, result.voice);
     } catch (error) {
       // An unconfigured engine or a voice outside its catalog: the pair cannot be served. Any other
-      // RangeError (a bad tier, an empty cascade order) is the relay's own failure.
+      // RangeError (a bad tier) is the relay's own failure.
       if (error instanceof UnknownEngineError || (error instanceof TtsError && error.kind === "unknown-voice")) {
         return json(400, { kind: "unknown-voice" });
       }
+      // An `order` naming no member is the client's mistake.
+      if (error instanceof EmptyCascadeOrderError) return json(400, { error: error.message });
       return failure(error);
     }
   }

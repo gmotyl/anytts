@@ -413,4 +413,17 @@ describe("relay serves every engine", () => {
     expect(elevenlabs.synthesize).toHaveBeenCalledTimes(1);
     expect(azure.synthesize).toHaveBeenCalledTimes(1);
   });
+
+  it("a cascade order with no members answers 400", async () => {
+    const { engine } = fakeEngine();
+    const { elevenlabs, azure, tts } = keyedSetup();
+    const handler = createRelayHandlerWith(engine, { tts });
+    for (const order of [[], ["cartesia"], ["cascade"]]) {
+      const res = await handler(post({ engine: "cascade", text: "Hi", lang: "pl", order }));
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: expect.stringMatching(/no members/) });
+    }
+    expect(elevenlabs.synthesize).not.toHaveBeenCalled();
+    expect(azure.synthesize).not.toHaveBeenCalled();
+  });
 });
