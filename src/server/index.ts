@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createEdgeEngine, type EdgeEngineOptions } from "../engines/edge/engine.js";
+import { createEdgeEngine } from "../engines/edge/engine.js";
 import { createAzureEngine } from "../engines/azure/engine.js";
 import { createCartesiaEngine } from "../engines/cartesia/engine.js";
 import { createElevenLabsEngine } from "../engines/elevenlabs/engine.js";
@@ -25,17 +25,16 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
   return createBrowserSafeTts(config, { ...internals, engineFactories: { ...KEYED_ENGINES, ...internals.engineFactories } });
 }
 
-export interface CreateRelayHandlerOptions extends RelayHandlerOptions {
-  edge?: EdgeEngineOptions;
-}
+export type CreateRelayHandlerOptions = RelayHandlerOptions;
 
 /**
- * Fetch-standard relay: `POST { text, voice }` → `200 audio/mpeg`, or
- * `400/403/413/502` JSON (`{ kind }` for unknown voices and engine failures).
+ * Fetch-standard relay: `POST { engine?, text, voice }` or `POST { engine: "cascade", text, lang?, … }`
+ * → `200 audio/mpeg` with `x-anytts-engine` / `x-anytts-voice`, or `400/403/413/502` JSON
+ * (`{ kind }` for unknown voices; `{ kind, retryAfter? }` plus `Retry-After` for engine failures).
+ * Without `engine` Edge serves the request; every other engine needs `tts`.
  */
 export function createRelayHandler(opts: CreateRelayHandlerOptions = {}): (req: Request) => Promise<Response> {
-  const { edge, ...relay } = opts;
-  return createRelayHandlerWith(createEdgeEngine(edge), relay);
+  return createRelayHandlerWith(createEdgeEngine(opts.edge), opts, (config) => createTts(config));
 }
 
 export interface NodeHandlerOptions {
