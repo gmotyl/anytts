@@ -7,6 +7,7 @@ const voice = (id: string): VoiceInfo => ({ id, label: id, locale: id.slice(0, 5
 interface Call {
   text: string;
   resolve: (bytes: ArrayBuffer) => void;
+  reject: (error: unknown) => void;
 }
 
 /** An engine whose calls the test settles by hand; aborting a call rejects it. */
@@ -17,7 +18,7 @@ function fakeEngine(id: string) {
     voices: [voice("en-US-AvaNeural")],
     synthesize(text, _voice, signal) {
       return new Promise<ArrayBuffer>((resolve, reject) => {
-        calls.push({ text, resolve });
+        calls.push({ text, resolve, reject });
         signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
       });
     },
@@ -111,5 +112,38 @@ describe("engine slots", () => {
     expect(azure.calls.map((c) => c.text)).toEqual(["a", "c", "d"]);
     azure.calls[2]!.resolve(bytes());
     await last;
+  });
+
+  it("a rejected engine call releases its slot", async () => {
+    const { tts, azure } = setup();
+    const failing = tts.synthesize({ text: "a", engine: "azure" });
+    const next = tts.synthesize({ text: "b", engine: "azure" });
+    await flush();
+    expect(azure.calls.map((c) => c.text)).toEqual(["a"]);
+
+    azure.calls[0]!.reject(new Error("boom"));
+    await expect(failing).rejects.toThrow("boom");
+    await flush();
+    // The failed job gave its slot back: the waiting job starts.
+    expect(azure.calls.map((c) => c.text)).toEqual(["a", "b"]);
+    azure.calls[1]!.resolve(bytes());
+    await next;
+  });
+
+  it("a job aborted mid-run releases its slot", async () => {
+    const { tts, azure } = setup();
+    const controller = new AbortController();
+    const running = tts.synthesize({ text: "a", engine: "azure", signal: controller.signal });
+    const next = tts.synthesize({ text: "b", engine: "azure" });
+    await flush();
+    expect(azure.calls.map((c) => c.text)).toEqual(["a"]);
+
+    controller.abort();
+    await expect(running).rejects.toMatchObject({ name: "AbortError" });
+    await flush();
+    // The aborted engine call settled and gave its slot back: the waiting job starts.
+    expect(azure.calls.map((c) => c.text)).toEqual(["a", "b"]);
+    azure.calls[1]!.resolve(bytes());
+    await next;
   });
 });

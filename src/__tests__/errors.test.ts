@@ -27,6 +27,9 @@ describe("TtsError", () => {
       "network",
       "no-audio",
       "unknown-voice",
+      "quota-exhausted",
+      "unauthorized",
+      "rate-limited",
     ];
     const transient = all.filter((k) => isTransient(k));
     expect(transient).toEqual(["first-byte-timeout", "stalled", "network"]);
