@@ -1,0 +1,16 @@
+{
+  "_source": [
+    "https://elevenlabs.io/docs/developers/resources/errors.md",
+    "https://elevenlabs.io/docs/help-center/technical/api-error-code-400-or-401.md"
+  ],
+  "_verified": "illustrative: the current detail shape { type, code, message, request_id } is documented on the errors page and quota_exceeded is a documented 401 code; this exact pairing (type value, message, request_id) is assembled from those docs, not captured from a live response",
+  "status": 401,
+  "body": {
+    "detail": {
+      "type": "authentication_error",
+      "code": "quota_exceeded",
+      "message": "This request exceeds your quota. You have 12 credits remaining, while 48 credits are required for this request.",
+      "request_id": "req_0000000000000002"
+    }
+  }
+}

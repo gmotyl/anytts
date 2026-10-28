@@ -8,7 +8,10 @@ export type VoiceMap = Record<string, string> & { default?: string };
 export interface KeyedEngineOptions {
   /** Provider API key. Without one, `synthesize` rejects `unauthorized` and sends nothing. */
   apiKey?: string;
-  /** Max wait for the response headers. Default 8000. */
+  /**
+   * Max wait for the response headers. Default 8000. It covers only the headers: once they arrive
+   * the stall clock takes over, so a gap before the first audio chunk is reported as `stalled`.
+   */
   firstByteMs?: number;
   /** Max gap between body chunks. Default 8000. */
   stallMs?: number;
@@ -46,13 +49,23 @@ const abortError = () => new DOMException("The operation was aborted.", "AbortEr
 export const missingKeyError = (engineId: string): TtsError =>
   new TtsError("unauthorized", `${engineId}: no apiKey configured`);
 
-/** `Retry-After` in seconds: delta-seconds or an HTTP date. `undefined` when absent or unparsable. */
+const IMF_FIXDATE =
+  /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+
+/**
+ * `Retry-After` in seconds: a non-negative integer delta-seconds, or an HTTP-date in IMF-fixdate
+ * form (`Wed, 21 Oct 2015 07:28:00 GMT`). `undefined` when absent or anything else (`-3`, `1.5`,
+ * `abc`, an impossible date).
+ */
 export function parseRetryAfter(value: string | null, now: number = Date.now()): number | undefined {
-  if (value === null || value.trim() === "") return undefined;
+  if (value === null) return undefined;
   const trimmed = value.trim();
   if (/^\d+$/.test(trimmed)) return Number(trimmed);
+  if (!IMF_FIXDATE.test(trimmed)) return undefined;
   const date = Date.parse(trimmed);
   if (Number.isNaN(date)) return undefined;
+  // Reject dates the parser rolled over (e.g. "31 Feb"): the day/month/time must round-trip.
+  if (new Date(date).toUTCString().slice(5) !== trimmed.slice(5)) return undefined;
   return Math.max(0, Math.ceil((date - now) / 1000));
 }
 
@@ -86,6 +99,9 @@ export async function refusalError(engineId: string, response: Response, rules: 
     const retryAfter = parseRetryAfter(response.headers.get("retry-after"));
     return new TtsError("rate-limited", message, { status, ...(retryAfter !== undefined ? { retryAfter } : {}) });
   }
+  // Deliberate deviation from "anything else → rejected": a 5xx is the provider's own failure,
+  // not a verdict on this request, so it is reported as transient `network` and gets retried
+  // (or cascades) instead of being treated as final.
   if (status >= 500) return new TtsError("network", message, { status });
   return new TtsError("rejected", message, { status });
 }

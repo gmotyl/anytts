@@ -65,6 +65,12 @@ describe("createElevenLabsEngine", () => {
     expect((await refusal(fixture("payment-required-402"))).kind).toBe("quota-exhausted");
   });
 
+  it("current { type, code } shape: 401 quota_exceeded maps to quota-exhausted", async () => {
+    const error = await refusal(fixture("quota-exceeded-401-current"));
+    expect(error.kind).toBe("quota-exhausted");
+    expect(error.status).toBe(401);
+  });
+
   it("other 401 maps to unauthorized", async () => {
     const error = await refusal(fixture("invalid-api-key-401"));
     expect(error.kind).toBe("unauthorized");
