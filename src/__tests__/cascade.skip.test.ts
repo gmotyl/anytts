@@ -142,6 +142,46 @@ describe("cascade skip windows", () => {
     expect(fake("b").calls).toHaveLength(1);
   });
 
+  it("all skipped by a rate limit carries the remaining window as retryAfter", async () => {
+    const { tts, fake, clock, speak } = setup({ a: {}, b: { apiKey: "k" }, cascade: { order: ["a", "b"] } });
+    fake("b").fail(() => new TtsError("rate-limited", undefined, { status: 429, retryAfter: 20 }));
+    await expect(speak()).rejects.toMatchObject({ kind: "rate-limited", retryAfter: 20 });
+    clock.now += 4_500;
+    // 15.5 s left: rounded up, and no request reaches `b`.
+    await expect(speak()).rejects.toMatchObject({ kind: "rate-limited", retryAfter: 16 });
+    expect(fake("b").calls).toHaveLength(1);
+    // Other skip kinds carry none.
+    const quota = setup({ a: { apiKey: "k" }, cascade: { order: ["a"] } });
+    quota.fake("a").fail(() => new TtsError("quota-exhausted"));
+    await quota.speak().catch(() => {});
+    const skipped = await quota.speak().catch((e: unknown) => e);
+    expect(skipped).toMatchObject({ kind: "quota-exhausted" });
+    expect((skipped as TtsError).retryAfter).toBeUndefined();
+    expect(tts.engineStatus("b")).toMatchObject({ state: "rate-limited" });
+  });
+
+  it("a later refusal never shortens an open window", async () => {
+    const { tts, fake, clock } = setup();
+    const t0 = clock.now;
+    const direct = (text: string) => tts.synthesize({ text, lang: "pl", engine: "a" }).catch(() => {});
+    // Rate-limited 20 s, then 5 s: the 20 s window stays.
+    fake("a").fail(() => new TtsError("rate-limited", undefined, { status: 429, retryAfter: 20 }));
+    await direct("r1");
+    fake("a").fail(() => new TtsError("rate-limited", undefined, { status: 429, retryAfter: 5 }));
+    await direct("r2");
+    expect(tts.engineStatus("a")).toEqual({ state: "rate-limited", until: new Date(t0 + 20_000).toISOString() });
+    // Quota-exhausted, then rate-limited: the quota window and its kind stay.
+    fake("b").fail(() => new TtsError("quota-exhausted"));
+    await tts.synthesize({ text: "q1", lang: "pl", engine: "b" }).catch(() => {});
+    fake("b").fail(() => new TtsError("rate-limited", undefined, { status: 429, retryAfter: 60 }));
+    await tts.synthesize({ text: "q2", lang: "pl", engine: "b" }).catch(() => {});
+    expect(tts.engineStatus("b")).toEqual({ state: "quota-exhausted", until: "2026-12-01T00:00:00.000Z" });
+    // A longer refusal does extend a window.
+    fake("a").fail(() => new TtsError("quota-exhausted"));
+    await direct("r3");
+    expect(tts.engineStatus("a")).toEqual({ state: "quota-exhausted", until: "2026-12-01T00:00:00.000Z" });
+  });
+
   it("a cached member answers even while it is skipped", async () => {
     const { tts, fake, speak } = setup();
     const req = { text: "y", lang: "pl" };

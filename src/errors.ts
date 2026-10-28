@@ -30,6 +30,20 @@ export class TtsError extends Error {
   }
 }
 
+/**
+ * A request names an engine the instance does not configure. A `RangeError`, as before; its own
+ * class lets a caller (the relay) tell it apart from other configuration errors.
+ */
+export class UnknownEngineError extends RangeError {
+  readonly engineId: string;
+
+  constructor(engineId: string) {
+    super(`engine is not configured: ${engineId}`);
+    this.name = "UnknownEngineError";
+    this.engineId = engineId;
+  }
+}
+
 const TRANSIENT: ReadonlySet<TtsErrorKind> = new Set(["first-byte-timeout", "stalled", "network"]);
 
 /** Transient kinds are worth retrying; the rest are final. */

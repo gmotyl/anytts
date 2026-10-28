@@ -2,7 +2,7 @@ import { LruCache } from "./cache.js";
 import { CASCADE, cachedMember, cascadeMembers, effectiveOrder, walkCascade, type CascadeMembers } from "./cascade.js";
 import type { Engine, VoiceMap } from "./engine.js";
 import { createEdgeEngine, type EdgeEngineOptions } from "./engines/edge/engine.js";
-import { isTransient, TtsError } from "./errors.js";
+import { isTransient, TtsError, UnknownEngineError } from "./errors.js";
 import { createScheduler, type ScheduledJob, type SchedulerConfig } from "./scheduler.js";
 import { applyPronunciation, type PronunciationMap } from "./text/pronunciation.js";
 import { registerVoiceSource } from "./voices.js";
@@ -278,7 +278,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
    */
   const resolveEngine = (engineId: string, req: SynthesisRequest, voiceOverride?: string, pronounceOverride?: boolean): Resolved => {
     const entry = engines.get(engineId);
-    if (!entry) throw new RangeError(`engine is not configured: ${engineId}`);
+    if (!entry) throw new UnknownEngineError(engineId);
     const voices = entry.config.voices ?? {};
     const voice = voiceOverride ?? (req.lang !== undefined && Object.hasOwn(voices, req.lang) ? voices[req.lang] : undefined) ?? voices.default;
     if (voice === undefined) throw new TtsError("unknown-voice", `${engineId} has no voice for ${req.lang ?? "default"}`);
@@ -330,7 +330,9 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     const window = openWindow(id);
     if (!window) return undefined;
     const span = window.until === Infinity ? "for this instance's life" : `until ${new Date(window.until).toISOString()}`;
-    return new TtsError(window.kind, `${id} is skipped by the cascade ${span} (${window.kind})`);
+    // A rate-limit window tells the caller how long is left, so a relay can send `Retry-After`.
+    const retryAfter = window.kind === "rate-limited" ? Math.ceil((window.until - now()) / 1000) : undefined;
+    return new TtsError(window.kind, `${id} is skipped by the cascade ${span} (${window.kind})`, retryAfter === undefined ? {} : { retryAfter });
   };
 
   /**
@@ -350,6 +352,8 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     } else {
       return;
     }
+    // A later refusal never shortens an open window (nor replaces a longer one's kind).
+    if ((openWindow(id)?.until ?? -Infinity) >= until) return;
     windows.set(id, { kind: error.kind, until });
   };
 
