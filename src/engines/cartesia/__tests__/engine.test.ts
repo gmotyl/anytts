@@ -101,6 +101,20 @@ describe("createCartesiaEngine", () => {
     expect((await refusal({ status: 401, body: "Unauthorized: Invalid API key" })).kind).toBe("unauthorized");
   });
 
+  it("bare 402 maps to quota-exhausted", async () => {
+    // A legacy plain-text 402 carries no code: it reads as spent credits.
+    expect((await refusal({ status: 402, body: "Payment Required: out of credits" })).kind).toBe("quota-exhausted");
+  });
+
+  it("403 without a code maps to unauthorized, with a specific code to rejected", async () => {
+    const noCode = await refusal({ status: 403, body: { error_code: null, title: "Forbidden", message: "admin key" } });
+    expect(noCode.kind).toBe("unauthorized");
+    expect(noCode.status).toBe(403);
+    expect((await refusal({ status: 403, body: "Forbidden" })).kind).toBe("unauthorized");
+    const coded = { status: 403, body: { error_code: "voice_access_denied", title: "Forbidden", message: "no access" } };
+    expect((await refusal(coded)).kind).toBe("rejected");
+  });
+
   it("429 maps to rate-limited with retryAfter", async () => {
     const error = await refusal(fixture("rate-limited-429"));
     expect(error.kind).toBe("rate-limited");
