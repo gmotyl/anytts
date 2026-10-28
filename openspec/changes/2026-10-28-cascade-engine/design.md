@@ -142,6 +142,11 @@ live in the instance; a restart costs at most one failed attempt per spent membe
 instance (a consumer replacing it after a key change) starts with no windows — wanted, since a new
 key clears `unauthorized`.
 
+**Observable state:** `tts.engineStatus(id)` returns `{ state: "ready" | "no-key" |
+"quota-exhausted" | "rate-limited" | "unauthorized", until?: string /* ISO */ }` from the skip
+windows, so a settings UI can show a live chip per member (the pavilio mockup does). The relay
+does not expose it; a consumer serves it from its own server instance.
+
 The exact status/body each provider returns for an exhausted quota is an open research point
 (tts-providers wiki); each keyed engine's task pins it from the provider's docs and a recorded
 fixture, and anything unrecognised maps to `rejected` (moves on, no window).

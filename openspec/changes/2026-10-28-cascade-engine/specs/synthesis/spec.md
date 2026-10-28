@@ -151,6 +151,17 @@ chain. Windows are in memory, per instance.
 - **THEN** the request rejects with the last attempted member's error, or — when none was
   attempted — the skip reason of the last skipped member
 
+### Requirement: An engine's availability is observable
+`tts.engineStatus(id)` reports `ready`, `no-key`, or the open skip window's kind with its `until`.
+
+#### Scenario: A spent member
+- **WHEN** ElevenLabs rejected `quota-exhausted` on 2026-11-12
+- **THEN** `engineStatus("elevenlabs")` is `{ state: "quota-exhausted", until: "2026-12-01T00:00:00.000Z" }`
+
+#### Scenario: A member without a key
+- **WHEN** `speechify` has no `apiKey`
+- **THEN** `engineStatus("speechify")` is `{ state: "no-key" }`
+
 ### Requirement: A browser caches a cascade result under its member and its alias
 In the browser, a cascade result is cached under the member key from the relay's headers and under
 the alias `(cascade, lang, optionsHash, text)`; `state` and `isCached` on a cascade request read the
