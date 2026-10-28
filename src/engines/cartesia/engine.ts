@@ -81,6 +81,7 @@ export function createCartesiaEngine(options: CartesiaEngineOptions = {}): Keyed
 
   return {
     id: "cartesia",
+    keyed: true,
     voices: CARTESIA_VOICES,
     defaults: { voices: { ...CARTESIA_VOICE_MAP }, maxConcurrent: 2 },
     synthesize,

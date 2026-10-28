@@ -35,5 +35,7 @@ export interface Engine {
   id: string;
   voices: readonly VoiceInfo[];
   defaults?: EngineDefaults;
+  /** Needs an `apiKey` in its config: the cascade skips it, without a request, when none is set. */
+  keyed?: boolean;
   synthesize(text: string, voice: string, signal: AbortSignal, hooks?: EngineHooks): Promise<ArrayBuffer>;
 }

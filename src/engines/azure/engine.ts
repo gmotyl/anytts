@@ -89,6 +89,7 @@ export function createAzureEngine(options: AzureEngineOptions = {}): KeyedEngine
 
   return {
     id: "azure",
+    keyed: true,
     voices: AZURE_VOICES,
     defaults: { voices: { ...AZURE_VOICE_MAP }, maxConcurrent: 1 },
     synthesize,

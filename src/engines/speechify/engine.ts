@@ -41,6 +41,7 @@ export function createSpeechifyEngine(options: SpeechifyEngineOptions = {}): Key
 
   return {
     id: "speechify",
+    keyed: true,
     voices: SPEECHIFY_VOICES,
     defaults: { voices: { ...SPEECHIFY_VOICE_MAP }, maxConcurrent: 2 },
     synthesize,

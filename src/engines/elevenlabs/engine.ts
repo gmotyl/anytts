@@ -59,6 +59,7 @@ export function createElevenLabsEngine(options: ElevenLabsEngineOptions = {}): K
 
   return {
     id: "elevenlabs",
+    keyed: true,
     voices: ELEVENLABS_VOICES,
     defaults: { voices: { ...ELEVENLABS_VOICE_MAP }, maxConcurrent: 2 },
     synthesize,

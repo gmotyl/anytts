@@ -20,6 +20,7 @@ export interface KeyedEngineOptions {
 
 /** A keyed engine plus the defaults the library fills in when the config leaves them unset. */
 export interface KeyedEngine extends Engine {
+  keyed: true;
   defaults: { voices: VoiceMap; maxConcurrent: number };
 }
 
