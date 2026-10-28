@@ -145,7 +145,8 @@ key clears `unauthorized`.
 **Observable state:** `tts.engineStatus(id)` returns `{ state: "ready" | "no-key" |
 "quota-exhausted" | "rate-limited" | "unauthorized", until?: string /* ISO */ }` from the skip
 windows, so a settings UI can show a live chip per member (the pavilio mockup does). The relay
-does not expose it; a consumer serves it from its own server instance.
+does not expose it over HTTP; a consumer serves it from the same instance the relay uses (it
+passes that instance as the relay's `tts`, see Relay protocol).
 
 The exact status/body each provider returns for an exhausted quota is an open research point
 (tts-providers wiki); each keyed engine's task pins it from the provider's docs and a recorded
@@ -174,8 +175,11 @@ fixture, and anything unrecognised maps to `rejected` (moves on, no window).
 
 - Body: `{ engine?, text, voice }` (one engine; `engine` defaults to `edge`, so today's clients are
   unchanged) or `{ engine: "cascade", text, lang?, voices?, order?, pronunciation? }`.
-- `createRelayHandler(opts)` keeps `{ maxChars, authorize?, edge? }` and gains `tts?: TtsConfig`;
-  with `tts`, the relay serves every engine of that config. Unknown `engine` → `400 { kind:
+- `createRelayHandler(opts)` keeps `{ maxChars, authorize?, edge? }` and gains `tts?: TtsConfig | Tts`;
+  with `tts`, the relay serves every engine of that config. Passing a `Tts` **instance** lets the
+  consumer share it — read `engineStatus` from the instance whose skip windows the relay fills, and
+  swap keys by building a new instance and a new handler (skip windows reset, which a new key
+  wants anyway). Unknown `engine` → `400 { kind:
   "unknown-voice" }` (the engine/voice pair cannot be served).
 - `200` responses carry `x-anytts-engine` and `x-anytts-voice` (the member that spoke).
 - Errors: `502 { kind, retryAfter? }`; `rate-limited` also sets `Retry-After`.

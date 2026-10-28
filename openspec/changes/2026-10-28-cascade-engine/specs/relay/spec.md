@@ -25,6 +25,11 @@ pronunciation? }` for the chain — and every `200` names the engine and voice t
 - **WHEN** `POST { engine: "cascade", text, lang: "pl" }` arrives and Azure serves it
 - **THEN** the response is `200` with `x-anytts-engine: azure` and Azure's voice in `x-anytts-voice`
 
+#### Scenario: A shared instance reports the relay's skip windows
+- **GIVEN** a relay created with `tts` set to a `Tts` instance whose cascade lists ElevenLabs first
+- **WHEN** a cascade request through the relay gets ElevenLabs' quota refusal
+- **THEN** `instance.engineStatus("elevenlabs")` on the consumer's side is `quota-exhausted`
+
 #### Scenario: Unknown voice
 - **WHEN** `voice` is not in the requested engine's catalog, or `engine` is not configured
 - **THEN** the response is `400` with JSON `{ "kind": "unknown-voice" }` and no upstream connection is made
