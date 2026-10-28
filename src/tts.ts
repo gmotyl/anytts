@@ -95,6 +95,18 @@ export interface Tts {
    * calls it keeps its attempts restartable even while audio is flowing.
    */
   restartStalled(): boolean;
+  /**
+   * A member's standing for the cascade: `no-key` for a keyed engine without an `apiKey`, else the
+   * kind of the skip window it sits in (`until` is when it closes, absent for `unauthorized`, which
+   * lasts the instance's life), else `ready`. Throws RangeError for an id that is not a configured engine.
+   */
+  engineStatus(id: string): EngineStatus;
+}
+
+export interface EngineStatus {
+  state: "ready" | "no-key" | "quota-exhausted" | "rate-limited" | "unauthorized";
+  /** ISO time the skip window closes. */
+  until?: string;
 }
 
 /**
@@ -106,9 +118,15 @@ export type EngineFactory = { create(options: Record<string, unknown>): Engine }
 /** Internal seam (not re-exported from the package entry): tests swap engines for fakes. */
 export interface CreateTtsInternals {
   engineFactories?: Record<string, EngineFactory>;
+  /** The clock skip windows are measured on, in epoch ms. Default: `Date.now`. */
+  now?: () => number;
 }
 
 const DEFAULT_RETRIES = 1;
+/** The rate-limit skip window when the provider gives no `Retry-After`. */
+const DEFAULT_RATE_LIMIT_SECONDS = 60;
+
+type SkipKind = Exclude<EngineStatus["state"], "ready" | "no-key">;
 
 /** Browser-safe factories only; `anytts/server` adds the keyed engines. */
 const BUILTIN_ENGINES: Record<string, EngineFactory> = { edge: createEdgeEngine };
@@ -281,14 +299,49 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
 
   const isCascade = (req: SynthesisRequest): boolean => members !== undefined && (req.engine ?? config.defaultEngine) === CASCADE;
 
-  /** A keyed engine without an `apiKey` is passed over by the cascade, never asked. */
-  const skipReason = (id: string): TtsError | undefined => {
-    const entry = engines.get(id)!;
-    const { apiKey } = entry.config;
-    if (entry.engine.keyed && !(typeof apiKey === "string" && apiKey.length > 0)) {
-      return new TtsError("unauthorized", `${id} has no key: skipped by the cascade`);
+  const now = internals.now ?? Date.now;
+  /** Open skip windows by member id; `until` is epoch ms, `Infinity` for the instance's life. */
+  const windows = new Map<string, { kind: SkipKind; until: number }>();
+
+  const hasNoKey = (id: string): boolean => {
+    const { engine, config: c } = engines.get(id)!;
+    return engine.keyed === true && !(typeof c.apiKey === "string" && c.apiKey.length > 0);
+  };
+
+  /** The member's open window; a closed one is forgotten. */
+  const openWindow = (id: string): { kind: SkipKind; until: number } | undefined => {
+    const window = windows.get(id);
+    if (window && window.until <= now()) {
+      windows.delete(id);
+      return undefined;
     }
-    return undefined;
+    return window;
+  };
+
+  /** A keyed engine without an `apiKey`, or one inside a skip window, is passed over by the cascade, never asked. */
+  const skipReason = (id: string): TtsError | undefined => {
+    if (hasNoKey(id)) return new TtsError("unauthorized", `${id} has no key: skipped by the cascade`);
+    const window = openWindow(id);
+    if (!window) return undefined;
+    const span = window.until === Infinity ? "for this instance's life" : `until ${new Date(window.until).toISOString()}`;
+    return new TtsError(window.kind, `${id} is skipped by the cascade ${span} (${window.kind})`);
+  };
+
+  /** Opens the member's skip window for a quota, auth or rate-limit failure; other kinds open none. */
+  const onFailure = (id: string, error: TtsError): void => {
+    const at = now();
+    let until: number;
+    if (error.kind === "quota-exhausted") {
+      const date = new Date(at);
+      until = Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1);
+    } else if (error.kind === "rate-limited") {
+      until = at + (error.retryAfter ?? DEFAULT_RATE_LIMIT_SECONDS) * 1000;
+    } else if (error.kind === "unauthorized") {
+      until = Infinity;
+    } else {
+      return;
+    }
+    windows.set(id, { kind: error.kind, until });
   };
 
   /** The cascade's view of its members for one request; `run` is filled in by `synthesize`. */
@@ -297,6 +350,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     run: (r: Resolved) => Promise<SynthesisResult> = () => Promise.reject(new Error("not runnable")),
   ): CascadeMembers<Resolved, SynthesisResult> => ({
     skipReason,
+    onFailure,
     prepare: (id) =>
       resolveEngine(
         id,
@@ -526,6 +580,13 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
         restarted = true;
       }
       return restarted;
+    },
+    engineStatus(id) {
+      if (!engines.has(id)) throw new RangeError(`unknown engine: ${id}`);
+      if (hasNoKey(id)) return { state: "no-key" };
+      const window = openWindow(id);
+      if (!window) return { state: "ready" };
+      return window.until === Infinity ? { state: window.kind } : { state: window.kind, until: new Date(window.until).toISOString() };
     },
   };
   registerVoiceSource(
