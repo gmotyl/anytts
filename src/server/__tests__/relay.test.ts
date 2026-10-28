@@ -278,4 +278,139 @@ describe("relay serves every engine", () => {
     expect((await guarded(post({ engine: "elevenlabs", text: "Hi", voice: "elevenlabs-pl" }))).status).toBe(403);
     expect((await guarded(post({ engine: "cascade", text: "Hi", lang: "pl" }))).status).toBe(403);
   });
+
+  it("the tts path rejects text over maxChars without an upstream call", async () => {
+    const { engine } = fakeEngine();
+    const { elevenlabs, azure, tts } = keyedSetup();
+    const handler = createRelayHandlerWith(engine, { tts, maxChars: 5 });
+    for (const body of [
+      { engine: "elevenlabs", text: "123456", voice: "elevenlabs-pl" },
+      { engine: "cascade", text: "123456", lang: "pl" },
+    ]) {
+      const res = await handler(post(body));
+      expect(res.status).toBe(413);
+      expect(await res.json()).toEqual({ error: "text longer than 5 characters" });
+    }
+    expect(elevenlabs.synthesize).not.toHaveBeenCalled();
+    expect(azure.synthesize).not.toHaveBeenCalled();
+  });
+
+  it("aborting the request aborts the upstream engine", async () => {
+    const { engine } = fakeEngine();
+    const { elevenlabs, tts } = keyedSetup();
+    let upstream: AbortSignal | undefined;
+    elevenlabs.synthesize.mockImplementation(
+      (_text, _voice, signal) =>
+        new Promise((_resolve, reject) => {
+          upstream = signal;
+          signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
+    );
+    const client = new AbortController();
+    const req = new Request("http://relay.test/api/tts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ engine: "elevenlabs", text: "Hi", voice: "elevenlabs-pl" }),
+      signal: client.signal,
+    });
+    const pending = createRelayHandlerWith(engine, { tts })(req);
+    await vi.waitFor(() => expect(upstream).toBeDefined());
+    expect(upstream!.aborted).toBe(false);
+    client.abort();
+    const res = await pending;
+    expect(upstream!.aborted).toBe(true);
+    expect(res.status).toBe(502);
+  });
+
+  it("a malformed cascade body answers 400 with an error", async () => {
+    const { engine } = fakeEngine();
+    const { elevenlabs, azure, tts } = keyedSetup();
+    const handler = createRelayHandlerWith(engine, { tts });
+    for (const extra of [
+      { voices: { elevenlabs: 7 } },
+      { voices: ["elevenlabs-pl"] },
+      { order: ["azure", 1] },
+      { pronunciation: { azure: "yes" } },
+      { lang: 5 },
+    ]) {
+      const res = await handler(post({ engine: "cascade", text: "Hi", ...extra }));
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: expect.any(String) });
+    }
+    expect(elevenlabs.synthesize).not.toHaveBeenCalled();
+    expect(azure.synthesize).not.toHaveBeenCalled();
+  });
+
+  it("explicit engine edge goes through tts when it configures edge", async () => {
+    const { engine, synthesize } = fakeEngine();
+    const shared = fakeEngine(async () => new Uint8Array([9]).buffer);
+    const tts = createTts(
+      {
+        engines: { edge: { voices: { pl: VOICE } }, cascade: { order: ["edge"] } },
+        defaultEngine: "cascade",
+        scheduler: { concurrency: 4, tiers: [{ name: "play" }] },
+      },
+      { engineFactories: { edge: () => shared.engine } },
+    );
+    const handler = createRelayHandlerWith(engine, { tts });
+
+    const explicit = await handler(post({ engine: "edge", text: "Hi", voice: VOICE }));
+    expect(explicit.status).toBe(200);
+    expect(explicit.headers.get("x-anytts-engine")).toBe("edge");
+    expect(new Uint8Array(await explicit.arrayBuffer())).toEqual(new Uint8Array([9]));
+    expect(shared.synthesize).toHaveBeenCalledTimes(1);
+    // Same cache: the cascade's edge member answers the unit without another request.
+    expect(tts.isCached({ engine: "edge", text: "Hi", voice: VOICE })).toBe(true);
+    expect(synthesize).not.toHaveBeenCalled();
+
+    // Without `engine` the standalone Edge engine answers, as before.
+    const bare = await handler(post({ text: "Hi", voice: VOICE }));
+    expect(new Uint8Array(await bare.arrayBuffer())).toEqual(AUDIO);
+    expect(synthesize).toHaveBeenCalledTimes(1);
+    expect(shared.synthesize).toHaveBeenCalledTimes(1);
+
+    // A tts without edge leaves explicit edge on the standalone engine.
+    const { tts: keyedOnly } = keyedSetup();
+    const standalone = await createRelayHandlerWith(engine, { tts: keyedOnly })(post({ engine: "edge", text: "Ho", voice: VOICE }));
+    expect(new Uint8Array(await standalone.arrayBuffer())).toEqual(AUDIO);
+    expect(synthesize).toHaveBeenCalledTimes(2);
+  });
+
+  it("only an unconfigured engine maps a RangeError to unknown-voice", async () => {
+    const { engine } = fakeEngine();
+    const { tts } = keyedSetup();
+    // A RangeError that is not about the engine (an unknown tier) is a server failure.
+    const broken: Tts = {
+      ...tts,
+      engineStatus: (id) => tts.engineStatus(id),
+      synthesize: async () => {
+        throw new RangeError("unknown tier: play");
+      },
+    };
+    const res = await createRelayHandlerWith(engine, { tts: broken })(post({ engine: "elevenlabs", text: "Hi", voice: "elevenlabs-pl" }));
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "synthesis failed" });
+    // An unconfigured engine still answers unknown-voice.
+    const unknown = await createRelayHandlerWith(engine, { tts })(post({ engine: "cartesia", text: "Hi", voice: "x" }));
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toEqual({ kind: "unknown-voice" });
+  });
+
+  it("every member skipped by a rate limit sends Retry-After", async () => {
+    const { engine } = fakeEngine();
+    const { elevenlabs, azure, tts } = keyedSetup();
+    elevenlabs.fail(() => new TtsError("rate-limited", "slow down", { status: 429, retryAfter: 30 }));
+    azure.fail(() => new TtsError("rate-limited", "slow down", { status: 429, retryAfter: 30 }));
+    const handler = createRelayHandlerWith(engine, { tts });
+    await handler(post({ engine: "cascade", text: "a", lang: "pl" }));
+    const res = await handler(post({ engine: "cascade", text: "b", lang: "pl" }));
+    expect(res.status).toBe(502);
+    const retryAfter = Number(res.headers.get("retry-after"));
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(retryAfter).toBeLessThanOrEqual(30);
+    expect(await res.json()).toEqual({ kind: "rate-limited", retryAfter });
+    // The second request reached no member.
+    expect(elevenlabs.synthesize).toHaveBeenCalledTimes(1);
+    expect(azure.synthesize).toHaveBeenCalledTimes(1);
+  });
 });

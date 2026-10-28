@@ -1,6 +1,6 @@
 import type { Engine } from "../engine.js";
 import type { EdgeEngineOptions } from "../engines/edge/engine.js";
-import { TtsError, type TtsErrorKind } from "../errors.js";
+import { TtsError, UnknownEngineError, type TtsErrorKind } from "../errors.js";
 import { createTts, type SynthesisRequest, type Tts, type TtsConfig } from "../tts.js";
 
 export interface RelayHandlerOptions {
@@ -11,13 +11,28 @@ export interface RelayHandlerOptions {
    * engines without it spends the key owner's quota for anyone who can reach it.
    */
   authorize?: (req: Request) => boolean | Promise<boolean>;
-  /** Options for the Edge engine that serves requests without `engine` (or `engine: "edge"`). */
+  /**
+   * Options for the standalone Edge engine that serves requests without `engine`, and
+   * `engine: "edge"` when `tts` does not configure edge.
+   */
   edge?: EdgeEngineOptions;
   /**
-   * Serves every other engine of this config (keyed engines, `cascade`). A `Tts` instance is used
-   * as-is, so its owner reads `engineStatus` from the skip windows relay requests open.
+   * Serves every engine of this config named in the body (keyed engines, `cascade`, and `edge`
+   * when it configures edge, sharing its cache and scheduler). A body without `engine` stays on the
+   * standalone Edge engine. A `Tts` instance is used as-is, so its owner reads `engineStatus` from
+   * the skip windows relay requests open.
    */
   tts?: TtsConfig | Tts;
+}
+
+/** Whether `tts` configures engine `id` (`engineStatus` throws RangeError for one it does not). */
+function configures(tts: Tts, id: string): boolean {
+  try {
+    tts.engineStatus(id);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const isTts = (tts: TtsConfig | Tts): tts is Tts => typeof (tts as Tts).synthesize === "function";
@@ -120,6 +135,7 @@ export function createRelayHandlerWith(
   const { maxChars = 2000, authorize } = options;
   const tts = options.tts === undefined ? undefined : isTts(options.tts) ? options.tts : buildTts(options.tts);
   const voiceIds = new Set(engine.voices.map((v) => v.id));
+  const ttsServesEdge = tts !== undefined && configures(tts, "edge");
   // Worst case 6 bytes per code unit (a `\uXXXX` JSON escape) plus JSON overhead.
   const maxBodyBytes = maxChars * 6 + 1024;
   const tooLarge = () => json(413, { error: `body larger than ${maxBodyBytes} bytes` });
@@ -148,7 +164,7 @@ export function createRelayHandlerWith(
       return json(400, { error: "expected engine to be a string" });
     }
 
-    if (engineId !== undefined && engineId !== "edge") return serveTts(req, engineId, fields);
+    if (engineId !== undefined && (engineId !== "edge" || ttsServesEdge)) return serveTts(req, engineId, fields);
 
     const { text, voice } = fields;
     if (typeof text !== "string" || typeof voice !== "string") {
@@ -178,8 +194,9 @@ export function createRelayHandlerWith(
       const result = await tts.synthesize({ ...parsed, signal: req.signal });
       return audio(result.bytes, result.engine, result.voice);
     } catch (error) {
-      // An unconfigured engine (RangeError) or a voice outside its catalog: the pair cannot be served.
-      if (error instanceof RangeError || (error instanceof TtsError && error.kind === "unknown-voice")) {
+      // An unconfigured engine or a voice outside its catalog: the pair cannot be served. Any other
+      // RangeError (a bad tier, an empty cascade order) is the relay's own failure.
+      if (error instanceof UnknownEngineError || (error instanceof TtsError && error.kind === "unknown-voice")) {
         return json(400, { kind: "unknown-voice" });
       }
       return failure(error);
