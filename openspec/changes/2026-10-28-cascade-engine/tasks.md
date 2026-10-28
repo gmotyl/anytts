@@ -130,9 +130,9 @@ interface TtsConfig { /* existing */ pronunciation?: Record<string, Pronunciatio
 - "bad key maps to unauthorized"
 - "429 maps to rate-limited with retryAfter"
 
-- [ ] **Step 1: Write the failing tests** — Run: `corepack pnpm exec vitest run src/engines/cartesia` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: same — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/engines/cartesia && git commit -m "feat(engines): Cartesia"`
+- [x] **Step 1: Write the failing tests** — Run: `corepack pnpm exec vitest run src/engines/cartesia` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: same — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/engines/cartesia && git commit -m "feat(engines): Cartesia"`
 
 ### Task 6: Speechify engine
 
