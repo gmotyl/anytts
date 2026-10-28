@@ -1,0 +1,11 @@
+{
+  "_source": "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/rest-text-to-speech#http-status-codes",
+  "_verified": "401 Unauthorized = key or token invalid or in the wrong region is documented; the body is assumed (the docs show no error body) and modelled on the Cognitive Services { error: { code, message } } envelope",
+  "status": 401,
+  "body": {
+    "error": {
+      "code": "401",
+      "message": "Access denied due to invalid subscription key or wrong API endpoint. Make sure to provide a valid key for an active subscription and use a correct regional API endpoint for your resource."
+    }
+  }
+}

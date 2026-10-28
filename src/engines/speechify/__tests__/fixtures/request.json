@@ -1,0 +1,19 @@
+{
+  "_source": [
+    "https://docs.sws.speechify.com/v1/api-reference/api-reference/tts/audio/stream.md",
+    "https://docs.speechify.ai/build/api-reference/overview.md",
+    "https://docs.speechify.ai/docs/language-support.md"
+  ],
+  "_verified": "2026-10-28 against the docs above (no live call)",
+  "method": "POST",
+  "url": "https://api.speechify.ai/v1/audio/stream",
+  "headers": { "authorization": "Bearer <key>", "content-type": "application/json", "accept": "audio/mpeg" },
+  "body": { "input": "…", "voice_id": "{voice_id}", "model": "simba-3.5" },
+  "_notes": [
+    "POST /v1/audio/stream returns raw audio bytes over HTTP chunked transfer; the Accept header picks the container (audio/mpeg | audio/ogg | audio/aac | audio/pcm) and the response Content-Type echoes it.",
+    "POST /v1/audio/speech returns JSON with base64 audio_data instead, so the stream endpoint is used: keyedFetch and onFirstByte need a byte body.",
+    "model defaults to simba-3.0 (English + de/es/fr/it/pt only); simba-3.5 is the recommended model and speaks 48 languages including Polish; simba-multilingual / simba-english are retired (400 model_retired) from API version 2026-09-21.",
+    "language is optional; when omitted the voice's own locale decides, so a native stock voice needs none.",
+    "Old docs host docs.sws.speechify.com and the old api.sws.speechify.com base now point at docs.speechify.ai / api.speechify.ai."
+  ]
+}

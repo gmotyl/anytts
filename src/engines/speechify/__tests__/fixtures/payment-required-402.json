@@ -1,0 +1,15 @@
+{
+  "_source": [
+    "https://docs.sws.speechify.com/v1/api-reference/api-reference/tts/audio/stream.md",
+    "https://docs.speechify.ai/build/guides/concepts/error-handling.md"
+  ],
+  "_verified": "402 Payment Required = \"insufficient credits\" (stream reference) / \"Insufficient balance or spend limit reached\" (error-handling guide), the { error: { code, message }, request_id } envelope and the payment_required code are documented; the message text and request_id are illustrative",
+  "status": 402,
+  "body": {
+    "error": {
+      "code": "payment_required",
+      "message": "Insufficient credits to complete this request."
+    },
+    "request_id": "req_0000000000000000"
+  }
+}

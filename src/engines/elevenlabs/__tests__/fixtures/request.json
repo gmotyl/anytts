@@ -1,0 +1,16 @@
+{
+  "_source": [
+    "https://elevenlabs.io/docs/api-reference/text-to-speech/convert.md",
+    "https://elevenlabs.io/docs/api-reference/authentication.md"
+  ],
+  "_verified": "2026-10-28 against the docs above (no live call)",
+  "method": "POST",
+  "url": "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream?output_format=mp3_44100_128",
+  "headers": { "xi-api-key": "<key>", "content-type": "application/json", "accept": "audio/mpeg" },
+  "body": { "text": "…", "model_id": "eleven_multilingual_v2" },
+  "_notes": [
+    "output_format defaults to mp3_44100_128 (codec_sample_rate_bitrate); 192 kbps needs Creator tier, so 128 is the free-tier-safe MP3.",
+    "model_id defaults to eleven_multilingual_v2.",
+    "/stream returns the same audio as /v1/text-to-speech/{voice_id}, chunked, so the first byte arrives earlier."
+  ]
+}

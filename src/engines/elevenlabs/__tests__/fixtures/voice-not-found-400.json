@@ -1,0 +1,11 @@
+{
+  "_source": "https://elevenlabs.io/docs/help-center/technical/api-error-code-400-or-401.md",
+  "_verified": "voice_not_found is documented in the 400/401 group; status code 400 and message are illustrative",
+  "status": 400,
+  "body": {
+    "detail": {
+      "status": "voice_not_found",
+      "message": "A voice with the voice_id nope was not found."
+    }
+  }
+}

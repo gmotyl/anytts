@@ -1,0 +1,16 @@
+{
+  "_source": [
+    "https://docs.speechify.ai/build/guides/concepts/error-handling.md",
+    "https://docs.speechify.ai/docs/api-limits.md"
+  ],
+  "_verified": "verbatim body from the error-handling guide's example; \"every 429 carries Retry-After\" (seconds) is documented, the header value 7 is illustrative (the guide's example shows Retry-After: 5)",
+  "status": 429,
+  "headers": { "retry-after": "7" },
+  "body": {
+    "error": {
+      "code": "rate_limited",
+      "message": "Rate limit exceeded. Retry after 10 seconds."
+    },
+    "request_id": "req_7f3a2c1b4d5e6f7a"
+  }
+}

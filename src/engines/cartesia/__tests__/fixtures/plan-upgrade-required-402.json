@@ -1,0 +1,11 @@
+{
+  "_source": "https://docs.cartesia.ai/use-the-api/api-errors.md",
+  "_verified": "error_code `plan_upgrade_required` (\"The feature requires a higher plan tier.\") is documented; 402 is assumed; title/message are illustrative. It must not read as an exhausted quota.",
+  "status": 402,
+  "body": {
+    "error_code": "plan_upgrade_required",
+    "title": "Plan upgrade required",
+    "message": "This feature requires a higher plan tier.",
+    "request_id": "550e8400-e29b-41d4-a716-446655440004"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "_source": [
+    "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/rest-text-to-speech#http-status-codes",
+    "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-services-quotas-and-limits"
+  ],
+  "_verified": "assumed: the docs describe 429 as 'quota or rate exceeded'; a 429 whose message names the quota is treated as period exhaustion. Body is assumed from the generic Cognitive Services { error: { code, message } } envelope (no live call)",
+  "status": 429,
+  "body": {
+    "error": {
+      "code": "429",
+      "message": "Out of call volume quota. Quota will be replenished in 2.00 days."
+    }
+  }
+}

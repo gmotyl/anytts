@@ -1,0 +1,154 @@
+import { TtsError } from "./errors.js";
+
+/** The engine id of the chain over the other engines. */
+export const CASCADE = "cascade";
+
+/** What the walk needs from the `Tts` instance; `M` is a member prepared for this request. */
+export interface CascadeMembers<M, R> {
+  /**
+   * Why member `id` is passed over without a request, or `undefined` when it may be tried: a keyed
+   * engine without an `apiKey`, or a member inside a skip window.
+   */
+  skipReason(id: string): TtsError | undefined;
+  /** Picks the member's voice and prepared text; throws (`unknown-voice`) when it cannot speak the request. */
+  prepare(id: string): M;
+  isCached(member: M): boolean;
+  /**
+   * Runs the member's own path: cache, then a scheduler job in its engine slot (waiting while it is
+   * busy). Rejects `MemberSkippedError` when the member's skip window opened while its job waited.
+   */
+  run(member: M): Promise<R>;
+  /** A failure that moves the walk to the next member. Skip windows open here. */
+  onFailure?(id: string, error: TtsError): void;
+}
+
+/**
+ * Validates `engines.cascade` against the configured engines and returns its members. `order` ids
+ * must be configured engines other than `cascade`; the cascade has no `voices` of its own.
+ */
+export function cascadeMembers(config: Record<string, unknown>, configured: (id: string) => boolean): string[] {
+  if (config.voices !== undefined) throw new RangeError("cascade has no voices: set them per member");
+  const { order } = config;
+  if (!Array.isArray(order) || !order.every((id): id is string => typeof id === "string")) {
+    throw new RangeError("cascade needs an order: an array of engine ids");
+  }
+  for (const id of order) {
+    if (id === CASCADE || !configured(id)) throw new RangeError(`cascade member is not a configured engine: ${id}`);
+  }
+  return [...new Set(order)];
+}
+
+/**
+ * A cascade request whose effective `order` holds no member: a caller mistake, not a synthesis
+ * failure. Still a `RangeError`; its own class lets the relay answer 400.
+ */
+export class EmptyCascadeOrderError extends RangeError {
+  constructor() {
+    super("cascade request has no members to try");
+    this.name = "EmptyCascadeOrderError";
+  }
+}
+
+/**
+ * A member job that reached its slot after the member's skip window opened (another request's
+ * refusal while it waited): no provider call was made. The walk counts the member as skipped.
+ */
+export class MemberSkippedError extends Error {
+  constructor(readonly reason: TtsError) {
+    super(reason.message);
+    this.name = "MemberSkippedError";
+  }
+}
+
+/** The request's `order` narrowed to members (non-members dropped), else every member; never empty. */
+export function effectiveOrder(members: readonly string[], requested?: readonly string[]): string[] {
+  const order = requested === undefined ? [...members] : [...new Set(requested)].filter((id) => members.includes(id));
+  if (order.length === 0) throw new EmptyCascadeOrderError();
+  return order;
+}
+
+/**
+ * Prepares every member in `order`, so a voice a member that may be tried cannot speak rejects
+ * (`unknown-voice`) before any request is spent. A skipped member is prepared too, for its cache
+ * entry only: one that cannot speak the request is left out, since it will not be tried.
+ */
+function prepareMembers<M, R>(order: readonly string[], members: CascadeMembers<M, R>): Map<string, M> {
+  const prepared = new Map<string, M>();
+  for (const id of order) {
+    if (!members.skipReason(id)) {
+      prepared.set(id, members.prepare(id));
+      continue;
+    }
+    try {
+      prepared.set(id, members.prepare(id));
+    } catch {
+      // No cache hit from this member, and no attempt either.
+    }
+  }
+  return prepared;
+}
+
+const firstCached = <M, R>(prepared: Map<string, M>, members: CascadeMembers<M, R>): M | undefined =>
+  [...prepared.values()].find((member) => members.isCached(member));
+
+/**
+ * The first member, in `order`, that already holds a cached result, skipped or not. Throws
+ * `unknown-voice` when a member that may be tried cannot speak the request, as the walk would.
+ */
+export function cachedMember<M, R>(order: readonly string[], members: CascadeMembers<M, R>): M | undefined {
+  return firstCached(prepareMembers(order, members), members);
+}
+
+/** `unknown-voice` and anything that is not a `TtsError` (an abort, a caller bug) stop the chain. */
+const switchesMember = (error: unknown): error is TtsError => error instanceof TtsError && error.kind !== "unknown-voice";
+
+/**
+ * Walks `order` until a member speaks. Every member that may be tried is prepared first, so a voice
+ * one of them cannot speak rejects before any request. Cache lookups go first, across every member
+ * (a skipped one included: skip reasons only rule out requests), so a unit already synthesized
+ * never costs quota. Then each member is tried in turn; a busy member is waited for (its `run`
+ * holds the job in the slot queue), never hopped over, and its skip window is checked again when
+ * the job starts, so a window opened while it waited still passes it over without a request.
+ * Rejects with the last attempted member's error (a copy carrying the earlier attempts' errors, in
+ * order, as `cause` when there were any), or the last skip reason when no member was attempted.
+ *
+ * The first member's job is enqueued synchronously, before this returns.
+ */
+export async function walkCascade<M, R>(order: readonly string[], members: CascadeMembers<M, R>): Promise<R> {
+  const prepared = prepareMembers(order, members);
+  const hit = firstCached(prepared, members);
+  if (hit !== undefined) return members.run(hit);
+  const attempted: TtsError[] = [];
+  let skipped: TtsError | undefined;
+  for (const id of order) {
+    const reason = members.skipReason(id);
+    if (reason) {
+      skipped = reason;
+      continue;
+    }
+    // A member skipped up front whose window closed during the walk may not have been prepared.
+    const member = prepared.get(id) ?? members.prepare(id);
+    try {
+      return await members.run(member);
+    } catch (error) {
+      // Skipped at slot start: as if passed over here, no attempt to record and no window to open.
+      if (error instanceof MemberSkippedError) {
+        skipped = error.reason;
+        continue;
+      }
+      // An abort surfaces as the member path's AbortError (here, or from the next member's `run`).
+      if (!switchesMember(error)) throw error;
+      members.onFailure?.(id, error);
+      attempted.push(error);
+    }
+  }
+  const last = attempted.at(-1);
+  if (last === undefined) throw skipped ?? new EmptyCascadeOrderError();
+  if (attempted.length === 1) throw last;
+  // A copy: the member's own error may be shared with other callers of the same job.
+  throw new TtsError(last.kind, last.message, {
+    ...(last.status !== undefined ? { status: last.status } : {}),
+    ...(last.retryAfter !== undefined ? { retryAfter: last.retryAfter } : {}),
+    cause: attempted.slice(0, -1),
+  });
+}

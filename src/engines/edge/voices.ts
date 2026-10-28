@@ -1,4 +1,4 @@
-import type { VoiceInfo } from "../../engine.js";
+import type { VoiceInfo, VoiceMap } from "../../engine.js";
 
 export type { VoiceInfo };
 
@@ -26,3 +26,10 @@ export const EDGE_VOICES: readonly VoiceInfo[] = [
   { id: "pl-PL-MarekNeural", label: "Marek (Polish)", locale: "pl-PL", gender: "male", multilingual: false },
   { id: "pl-PL-ZofiaNeural", label: "Zofia (Polish)", locale: "pl-PL", gender: "female", multilingual: false },
 ];
+
+/** Built-in Voice map, used when the config sets no `voices`. */
+export const EDGE_VOICE_MAP: VoiceMap = {
+  pl: "pl-PL-ZofiaNeural",
+  en: "en-US-AvaMultilingualNeural",
+  default: "en-US-AvaMultilingualNeural",
+};

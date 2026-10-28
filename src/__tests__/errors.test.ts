@@ -27,8 +27,23 @@ describe("TtsError", () => {
       "network",
       "no-audio",
       "unknown-voice",
+      "quota-exhausted",
+      "unauthorized",
+      "rate-limited",
     ];
     const transient = all.filter((k) => isTransient(k));
     expect(transient).toEqual(["first-byte-timeout", "stalled", "network"]);
+  });
+
+  it("rate-limited carries retryAfter", () => {
+    const err = new TtsError("rate-limited", "429", { status: 429, retryAfter: 30 });
+    expect(err.kind).toBe("rate-limited");
+    expect(err.retryAfter).toBe(30);
+    expect(new TtsError("rate-limited").retryAfter).toBeUndefined();
+  });
+
+  it("refusal kinds are not transient", () => {
+    const refusals: TtsErrorKind[] = ["quota-exhausted", "unauthorized", "rate-limited"];
+    for (const kind of refusals) expect(isTransient(kind)).toBe(false);
   });
 });

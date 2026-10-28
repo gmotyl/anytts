@@ -1,0 +1,15 @@
+{
+  "_source": [
+    "https://docs.sws.speechify.com/v1/api-reference/api-reference/tts/audio/stream.md",
+    "https://docs.speechify.ai/build/guides/concepts/error-handling.md"
+  ],
+  "_verified": "401 = \"Missing or invalid API key\" and the unauthorized code are documented; the message text and request_id are illustrative",
+  "status": 401,
+  "body": {
+    "error": {
+      "code": "unauthorized",
+      "message": "Invalid API key."
+    },
+    "request_id": "req_0000000000000001"
+  }
+}

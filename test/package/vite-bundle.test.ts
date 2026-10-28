@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, inject, it } from "vitest";
@@ -5,6 +6,19 @@ import { build } from "vite";
 import { installPacked } from "./helpers.js";
 
 const SERVER_MARKERS = ["toNodeHandler", "createRelayHandler", "writeHead"];
+// Key-handling code of the keyed engines: provider endpoints and the shared keyed base.
+const KEYED_MARKERS = [
+  "api.elevenlabs.io",
+  "api.cartesia.ai",
+  "api.speechify.ai",
+  "tts.speech.microsoft.com",
+  "createElevenLabsEngine",
+  "createCartesiaEngine",
+  "createSpeechifyEngine",
+  "createAzureEngine",
+  "keyedFetch",
+  "no apiKey configured",
+];
 const ENGINE_MARKERS = ["TrustedClientToken", "speech.platform.bing.com", "Sec-MS-GEC", "createEdgeEngine"];
 
 let dir: string;
@@ -73,4 +87,39 @@ it("text entry bundles without engine code", async () => {
   expectNoNodeBuiltins(out);
   expect(out.code).toContain("packUnits");
   for (const marker of [...ENGINE_MARKERS, ...SERVER_MARKERS]) expect(out.code).not.toContain(marker);
+});
+
+it("main entry ships no keyed engine code", async () => {
+  const out = await bundle("keyless", `import * as tts from "anytts";\nconsole.log(tts);\n`);
+  // Sanity: the main entry is in (edge, and the keyed engines' static catalogs for settings UIs).
+  expect(out.code).toContain("speech.platform.bing.com");
+  for (const marker of KEYED_MARKERS) expect(out.code).not.toContain(marker);
+
+  // `anytts/server` registers the keyed factories; the main entry registers relay clients for the
+  // same ids (and `cascade`), which hold no key and need a relayUrl.
+  writeFileSync(
+    join(dir, "keyed.mjs"),
+    `
+import { createTts } from "anytts";
+import { createTts as createServerTts } from "anytts/server";
+const scheduler = { concurrency: 1, tiers: [{ name: "play" }] };
+const relayUrl = "https://relay.test/tts";
+const ids = ["elevenlabs", "cartesia", "speechify", "azure"];
+const attempt = (create, config) => { try { create(config); return "ok"; } catch (e) { return e.name; } };
+const result = {};
+for (const id of ids) {
+  const config = { engines: { [id]: {} }, defaultEngine: id, scheduler };
+  const relayed = { engines: { [id]: { relayUrl } }, defaultEngine: id, scheduler };
+  result[id] = { main: attempt(createTts, relayed), mainWithoutRelay: attempt(createTts, config), server: attempt(createServerTts, config) };
+}
+result.cascade = { main: attempt(createTts, { engines: { cascade: { relayUrl } }, defaultEngine: "cascade", scheduler }) };
+console.log(JSON.stringify(result));
+`,
+  );
+  const result = JSON.parse(execFileSync("node", ["keyed.mjs"], { cwd: dir, encoding: "utf8" })) as Record<
+    string,
+    Record<string, string>
+  >;
+  const keyed = { main: "ok", mainWithoutRelay: "RangeError", server: "ok" };
+  expect(result).toEqual({ elevenlabs: keyed, cartesia: keyed, speechify: keyed, azure: keyed, cascade: { main: "ok" } });
 });

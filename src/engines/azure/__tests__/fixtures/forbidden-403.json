@@ -1,0 +1,11 @@
+{
+  "_source": "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/rest-text-to-speech#http-status-codes",
+  "_verified": "assumed: 403 is not in the documented status table; Cognitive Services answers 403 for a disabled resource or an inactive subscription. Body is assumed from the generic Cognitive Services { error: { code, message } } envelope (no live call)",
+  "status": 403,
+  "body": {
+    "error": {
+      "code": "403",
+      "message": "The Speech resource is disabled. Make sure the subscription is active and the resource is enabled."
+    }
+  }
+}

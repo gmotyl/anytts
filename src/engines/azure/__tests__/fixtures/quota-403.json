@@ -1,0 +1,14 @@
+{
+  "_source": [
+    "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/rest-text-to-speech#http-status-codes",
+    "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-services-quotas-and-limits"
+  ],
+  "_verified": "assumed: 403 is not in the documented status table; Cognitive Services answers 403 'Out of call volume quota' when the F0 monthly allowance is used. Body is assumed from the generic Cognitive Services { error: { code, message } } envelope (no live call)",
+  "status": 403,
+  "body": {
+    "error": {
+      "code": "403",
+      "message": "Out of call volume quota. Quota will be replenished in 2.00 days."
+    }
+  }
+}
