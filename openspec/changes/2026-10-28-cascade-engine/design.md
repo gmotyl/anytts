@@ -194,7 +194,7 @@ is `network` (see Decisions during implementation).
 
 ## Browser relay clients
 
-- `cascade` and each keyed engine accept only `{ relayUrl, firstByteMs? }` in the browser and POST
+- `cascade` and each keyed engine accept only `{ relayUrl, firstByteMs?, stallMs? }` (cascade also `retries?`, default 0) in the browser and POST
   the request to it; `engine`/`voice` in the result come from the response headers.
 - A cascade result is cached under the member key from the headers **and** the cascade alias.
 - Relay errors keep their kind and `retryAfter`. Keyed relay clients follow the normal retry

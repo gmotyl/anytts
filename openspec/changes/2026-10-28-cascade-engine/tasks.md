@@ -328,9 +328,9 @@ interface RelayHandlerOptions { maxChars?: number; authorize?: (req: Request) =>
 - "relay errors keep kind and wait"
 - "no key reaches the browser"
 
-- [ ] **Step 1: Write the failing tests** — Run: `corepack pnpm exec vitest run src/__tests__/cascade.alias.test.ts src/engines/__tests__/relayEngine.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: same, then `corepack pnpm test && corepack pnpm lint` — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat: browser relay clients and cascade alias cache"`
+- [x] **Step 1: Write the failing tests** — Run: `corepack pnpm exec vitest run src/__tests__/cascade.alias.test.ts src/engines/__tests__/relayEngine.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: same, then `corepack pnpm test && corepack pnpm lint` — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat: browser relay clients and cascade alias cache"`
 
 ### Task 13: README, live probe and release prep
 
@@ -340,6 +340,6 @@ interface RelayHandlerOptions { maxChars?: number; authorize?: (req: Request) =>
 
 **Verification: non-testable** — Run: `corepack pnpm test && corepack pnpm lint && corepack pnpm build` — Expected: all green; README shows the config example from design.md; `node scripts/probe-keyed.mjs` without keys prints which keys are missing and exits 0.
 
-- [ ] **Step 1: Docs, probe and version bump** — Run: the command above — Expected: green
-- [ ] **Step 2: Commit** — `git commit -am "docs: keyed engines and cascade; release prep"`
+- [x] **Step 1: Docs, probe and version bump** — Run: the command above — Expected: green
+- [x] **Step 2: Commit** — `git commit -am "docs: keyed engines and cascade; release prep"`
 - [ ] **Step 3: Push the branch and open a PR to `main`** — release follows the repo's tag flow (staged publish, approved by the owner).
