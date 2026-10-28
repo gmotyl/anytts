@@ -4,7 +4,7 @@ import { buildConfigMessage, buildSsmlMessage, newRequestId, parseFrame } from "
 import { relaySynthesize } from "./relayClient.js";
 import { createSecMsGecGenerator, SEC_MS_GEC_VERSION, TRUSTED_CLIENT_TOKEN } from "./token.js";
 import { defaultTransport, type Transport } from "./transport.js";
-import { EDGE_VOICES } from "./voices.js";
+import { EDGE_VOICE_MAP, EDGE_VOICES } from "./voices.js";
 
 export interface EdgeEngineOptions {
   /** Max wait for the first audio chunk, from opening the socket. */
@@ -268,5 +268,5 @@ export function createEdgeEngine(options: EdgeEngineOptions = {}): Engine {
   }
 
   // Same id and voices in every mode, so cache keys and settings do not change.
-  return { id: "edge", voices: EDGE_VOICES, synthesize };
+  return { id: "edge", voices: EDGE_VOICES, defaults: { voices: { ...EDGE_VOICE_MAP } }, synthesize };
 }

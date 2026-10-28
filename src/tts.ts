@@ -1,5 +1,5 @@
 import { LruCache } from "./cache.js";
-import type { Engine } from "./engine.js";
+import type { Engine, VoiceMap } from "./engine.js";
 import { createEdgeEngine, type EdgeEngineOptions } from "./engines/edge/engine.js";
 import { isTransient, TtsError } from "./errors.js";
 import { createScheduler, type ScheduledJob, type SchedulerConfig } from "./scheduler.js";
@@ -31,7 +31,8 @@ export interface SynthesisResult {
 }
 
 export type EngineConfig = {
-  voices?: Record<string, string> & { default?: string };
+  /** Language → voice id. Default: the engine's built-in `pl`/`en`/`default` Voice map. */
+  voices?: VoiceMap;
   /** Extra attempts after a transient failure. Default 1. */
   retries?: number;
   /**
@@ -39,12 +40,16 @@ export type EngineConfig = {
    * Default `true` for `edge`, `false` for every other engine.
    */
   pronunciation?: boolean;
-  /** Most attempts this engine runs at once; a waiting job keeps its tier priority. Default unlimited. */
+  /**
+   * Most attempts this engine runs at once; a waiting job keeps its tier priority. Default: the
+   * engine's own (Azure 1, Cartesia / ElevenLabs / Speechify 2), unlimited for `edge`.
+   */
   maxConcurrent?: number;
 } & Record<string, unknown>;
 
 export interface TtsConfig {
-  engines: Record<string, EngineConfig>;
+  /** Engine id → config; engine-specific fields (e.g. `edge`'s) sit next to the shared ones. */
+  engines: { edge?: EngineConfig & EdgeEngineOptions } & Record<string, EngineConfig>;
   defaultEngine: string;
   scheduler: SchedulerConfig;
   cache?: { max?: number };
@@ -77,7 +82,11 @@ export interface Tts {
   restartStalled(): boolean;
 }
 
-export type EngineFactory = (options: EdgeEngineOptions) => Engine;
+/**
+ * Builds an engine from its config minus the shared fields. Declared as a method so factories
+ * taking their own options type (`EdgeEngineOptions`, `AzureEngineOptions`, …) fit.
+ */
+export type EngineFactory = { create(options: Record<string, unknown>): Engine }["create"];
 
 /** Internal seam (not re-exported from the package entry): tests swap engines for fakes. */
 export interface CreateTtsInternals {
@@ -86,6 +95,7 @@ export interface CreateTtsInternals {
 
 const DEFAULT_RETRIES = 1;
 
+/** Browser-safe factories only; `anytts/server` adds the keyed engines. */
 const BUILTIN_ENGINES: Record<string, EngineFactory> = { edge: createEdgeEngine };
 
 const abortError = (): Error =>
@@ -169,17 +179,28 @@ const listen = (phases: Phases, req: SynthesisRequest): Listener => {
 
 export function createTts(config: TtsConfig, internals: CreateTtsInternals = {}): Tts {
   const factories = { ...BUILTIN_ENGINES, ...internals.engineFactories };
+  // `config` is the engine's effective config: unset `voices` / `maxConcurrent` take the engine's defaults.
   const engines = new Map<string, { engine: Engine; config: EngineConfig }>();
   for (const [id, engineConfig] of Object.entries(config.engines)) {
     const factory = Object.hasOwn(factories, id) ? factories[id] : undefined;
     if (!factory) throw new RangeError(`unknown engine: ${id}`);
     const { voices: _voices, retries: _retries, pronunciation: _pronunciation, maxConcurrent: _maxConcurrent, ...options } = engineConfig;
-    engines.set(id, { engine: factory(options), config: engineConfig });
+    const engine = factory(options);
+    const voices = engineConfig.voices ?? engine.defaults?.voices;
+    const maxConcurrent = engineConfig.maxConcurrent ?? engine.defaults?.maxConcurrent;
+    engines.set(id, {
+      engine,
+      config: {
+        ...engineConfig,
+        ...(voices !== undefined ? { voices } : {}),
+        ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
+      },
+    });
   }
   if (!engines.has(config.defaultEngine)) throw new RangeError(`default engine is not configured: ${config.defaultEngine}`);
 
   const cache = new LruCache<SynthesisResult>(config.cache);
-  // Engines without `maxConcurrent` are unlimited, bounded only by the scheduler's concurrency.
+  // Engines without an effective `maxConcurrent` are unlimited, bounded only by the scheduler's concurrency.
   const slots: Record<string, number> = {};
   for (const [id, { config: c }] of engines) if (c.maxConcurrent !== undefined) slots[id] = c.maxConcurrent;
   const scheduler = createScheduler(config.scheduler, slots);

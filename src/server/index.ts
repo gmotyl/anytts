@@ -1,6 +1,29 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createEdgeEngine, type EdgeEngineOptions } from "../engines/edge/engine.js";
+import { createAzureEngine } from "../engines/azure/engine.js";
+import { createCartesiaEngine } from "../engines/cartesia/engine.js";
+import { createElevenLabsEngine } from "../engines/elevenlabs/engine.js";
+import { createSpeechifyEngine } from "../engines/speechify/engine.js";
+import { createTts as createBrowserSafeTts, type CreateTtsInternals, type EngineFactory, type Tts, type TtsConfig } from "../tts.js";
 import { createRelayHandlerWith, type RelayHandlerOptions } from "./relay.js";
+
+export type { AzureEngineOptions } from "../engines/azure/engine.js";
+export type { CartesiaEngineOptions } from "../engines/cartesia/engine.js";
+export type { ElevenLabsEngineOptions } from "../engines/elevenlabs/engine.js";
+export type { SpeechifyEngineOptions } from "../engines/speechify/engine.js";
+
+/** Keyed engines hold API keys, so only this (Node) entry registers them. */
+const KEYED_ENGINES: Record<string, EngineFactory> = {
+  elevenlabs: createElevenLabsEngine,
+  cartesia: createCartesiaEngine,
+  speechify: createSpeechifyEngine,
+  azure: createAzureEngine,
+};
+
+/** `createTts` from `anytts`, plus the keyed engines (`elevenlabs`, `cartesia`, `speechify`, `azure`). */
+export function createTts(config: TtsConfig, internals: CreateTtsInternals = {}): Tts {
+  return createBrowserSafeTts(config, { ...internals, engineFactories: { ...KEYED_ENGINES, ...internals.engineFactories } });
+}
 
 export interface CreateRelayHandlerOptions extends RelayHandlerOptions {
   edge?: EdgeEngineOptions;

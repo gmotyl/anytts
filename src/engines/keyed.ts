@@ -1,8 +1,7 @@
-import type { Engine, EngineHooks } from "../engine.js";
+import type { Engine, EngineHooks, VoiceMap } from "../engine.js";
 import { TtsError } from "../errors.js";
 
-/** A Voice map: language → voice id, plus an optional `default`. */
-export type VoiceMap = Record<string, string> & { default?: string };
+export type { VoiceMap };
 
 /** Options every keyed engine accepts (engine-specific fields come on top). */
 export interface KeyedEngineOptions {

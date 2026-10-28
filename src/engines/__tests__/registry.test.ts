@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createEdgeEngine } from "../edge/engine.js";
+import { AZURE_VOICES } from "../azure/voices.js";
+import { CARTESIA_VOICES } from "../cartesia/voices.js";
+import { ELEVENLABS_VOICES } from "../elevenlabs/voices.js";
 import { listEngines, listVoices } from "../registry.js";
+import { SPEECHIFY_VOICES } from "../speechify/voices.js";
 
 // Copied from motyl `lib/tts/voices.ts` (TTS_VOICES).
 const MOTYL_VOICES = [
@@ -33,11 +37,30 @@ const PAVILIO_VOICES = [
 ];
 
 describe("registry", () => {
-  it("lists the edge engine for browser and node", () => {
+  it("lists keyed engines and cascade with runtimes", () => {
     const engines = listEngines();
-    expect(engines.map((engine) => engine.id)).toEqual(["edge"]);
-    expect([...engines[0]!.runtimes].sort()).toEqual(["browser", "node"]);
-    expect(engines[0]!.label).toBeTruthy();
+    expect(engines.map((engine) => engine.id)).toEqual(["edge", "elevenlabs", "cartesia", "speechify", "azure", "cascade"]);
+    const runtimes = Object.fromEntries(engines.map((engine) => [engine.id, [...engine.runtimes].sort()]));
+    expect(runtimes).toEqual({
+      edge: ["browser", "node"],
+      elevenlabs: ["node"],
+      cartesia: ["node"],
+      speechify: ["node"],
+      azure: ["node"],
+      cascade: ["browser", "node"],
+    });
+    for (const engine of engines) expect(engine.label).toBeTruthy();
+    // Copies: mutating a listing does not touch the registry.
+    engines[0]!.runtimes.pop();
+    expect(listEngines()[0]!.runtimes).toHaveLength(2);
+  });
+
+  it("cascade has no catalog", () => {
+    expect(listVoices("cascade")).toEqual([]);
+    expect(listVoices("azure")).toEqual(AZURE_VOICES);
+    expect(listVoices("elevenlabs")).toEqual(ELEVENLABS_VOICES);
+    expect(listVoices("cartesia")).toEqual(CARTESIA_VOICES);
+    expect(listVoices("speechify")).toEqual(SPEECHIFY_VOICES);
   });
 
   it("edge catalog includes Polish voices and both apps' voices", () => {
