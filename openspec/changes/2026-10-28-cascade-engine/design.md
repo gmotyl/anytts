@@ -176,6 +176,8 @@ is `network` (see Decisions during implementation).
   cascade request read the alias; evicting the member entry evicts its aliases. The member key is
   rebuilt from the browser's pronunciation config, which may differ from the relay's: when it
   already holds an entry, the answer is cached under the alias key alone and never overwrites it.
+  That alias-only entry duplicates the audio and takes a cache slot — the safe choice over
+  answering one request with the other's audio.
 - The server does not keep aliases: its lookups walk the member keys (above).
 
 ## Relay protocol
@@ -215,7 +217,9 @@ is `network` (see Decisions during implementation).
 - **Recheck at slot start.** A member job that waited for its slot checks the member's skip window
   again when it starts; one opened meanwhile (by the job ahead of it, before its slot frees) passes
   the member over with no request, and the walk keeps that skip reason. Only when every caller of
-  the job is a cascade walk: a direct request sharing it still reaches the engine.
+  the job is a cascade walk: a direct request sharing it still reaches the engine. A job skipped
+  at start leaves the in-flight map before it rejects, so a request arriving just after joins no
+  dead job. A job whose callers all aborted still opens the window if the provider refused.
 - **Windows never shrink.** A later refusal does not shorten an open window or replace a longer
   one's kind.
 - **Explicit `engine: "edge"` at the relay** goes through the shared `tts` instance (its cache,

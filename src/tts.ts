@@ -517,7 +517,12 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     const job = scheduler.enqueue(tier, async () => {
       // Only cascade walks wait on this job: a window opened while it was queued passes the member over.
       const skipped = flight !== undefined && flight.direct === 0 && engines.has(r.engineId) ? skipReason(r.engineId) : undefined;
-      if (skipped) throw new MemberSkippedError(skipped);
+      if (skipped) {
+        // Out of the map before the throw: a direct request arriving before `release` runs starts a
+        // fresh job instead of joining this dead one.
+        settle(r.key, flight!);
+        throw new MemberSkippedError(skipped);
+      }
       reach(phases, "started");
       let result: SynthesisResult;
       try {
@@ -656,7 +661,8 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
           if (settled) return;
           settled = true;
           signal?.removeEventListener("abort", onAbort);
-          rejectPromise(error);
+          // Only a cascade walk understands a skip; anyone else hears the refusal behind it.
+          rejectPromise(!viaCascade && error instanceof MemberSkippedError ? error.reason : error);
         },
       );
     });

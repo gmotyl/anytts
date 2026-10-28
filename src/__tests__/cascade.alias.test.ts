@@ -78,27 +78,41 @@ describe("cascade alias", () => {
     // The relay's edge speaks the text as written unless the request turns its pronunciation on;
     // the browser's edge has it on. Both answers rebuild the same member key in the browser.
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body)) as { pronunciation?: Record<string, boolean> };
+      const body = JSON.parse(String(init?.body)) as { engine: string; voice?: string; pronunciation?: Record<string, boolean> };
       const bytes = body.pronunciation?.edge === true ? [2] : [1];
+      const [engine, voice] = body.engine === "cascade" ? ["edge", MAREK] : [body.engine, body.voice!];
       return new Response(new Uint8Array(bytes), {
-        headers: { "content-type": "audio/mpeg", "x-anytts-engine": "edge", "x-anytts-voice": MAREK },
+        headers: { "content-type": "audio/mpeg", "x-anytts-engine": engine, "x-anytts-voice": voice },
       });
     });
     vi.stubGlobal("fetch", fetchMock);
     const tts = createTts({
-      engines: { cascade: { relayUrl: RELAY }, edge: { voices: EDGE_VOICE_MAP } },
+      engines: { cascade: { relayUrl: RELAY }, elevenlabs: { relayUrl: RELAY }, edge: { voices: EDGE_VOICE_MAP } },
       defaultEngine: "cascade",
       scheduler,
+      // Two entries: the member entry and the alias-only one (aliases do not count).
+      cache: { max: 2 },
       pronunciation: { pl: { pavilio: "pawilio" } },
     });
     const plain: SynthesisRequest = { text: "pavilio", lang: "pl" };
     const respelled: SynthesisRequest = { text: "pavilio", lang: "pl", pronunciation: { edge: true } };
     expect(new Uint8Array((await tts.synthesize(plain)).bytes)).toEqual(new Uint8Array([1]));
     expect(new Uint8Array((await tts.synthesize(respelled)).bytes)).toEqual(new Uint8Array([2]));
+    // The alias-only entry reads as ready, like an alias of a member entry.
+    expect(tts.state(respelled)).toBe("ready");
+    expect(tts.isCached(respelled)).toBe(true);
+    expect(tts.state(plain)).toBe("ready");
     // Each alias still answers with its own relay answer, from the cache.
     expect(new Uint8Array((await tts.synthesize(plain)).bytes)).toEqual(new Uint8Array([1]));
     expect(new Uint8Array((await tts.synthesize(respelled)).bytes)).toEqual(new Uint8Array([2]));
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Another unit pushes the least recently used member entry out; the alias-only entry stays.
+    await tts.synthesize({ engine: "elevenlabs", text: "Hej", lang: "pl", voice: ELEVENLABS_VOICE_MAP.pl! });
+    expect(tts.state(plain)).toBe("cold");
+    expect(tts.state(respelled)).toBe("ready");
+    expect(tts.isCached(respelled)).toBe(true);
+    expect(new Uint8Array((await tts.synthesize(respelled)).bytes)).toEqual(new Uint8Array([2]));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("evicting the member drops the alias", async () => {

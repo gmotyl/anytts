@@ -366,6 +366,92 @@ describe("cascade skip windows", () => {
     expect(await second).toMatchObject({ engine: "a" });
   });
 
+  it("a direct request arriving as a queued attempt skips at start never joins the dead job", async () => {
+    for (let delay = 0; delay <= 12; delay++) {
+      let refuse!: (error: unknown) => void;
+      const calls: string[] = [];
+      const slow: Engine = {
+        id: "a",
+        keyed: true,
+        voices: [{ id: "a-pl", label: "a", locale: "pl-PL", gender: "male", multilingual: false }],
+        synthesize(text) {
+          calls.push(text);
+          // The first call hangs until refused; later ones answer.
+          if (calls.length > 1) return Promise.resolve(new Uint8Array([2]).buffer);
+          return new Promise((_resolve, reject) => {
+            refuse = reject;
+          });
+        },
+      };
+      const b = fakeEngine("b", true);
+      const tts = createTts(
+        {
+          engines: {
+            a: { apiKey: "k", maxConcurrent: 1, voices: { pl: "a-pl" } },
+            b: { apiKey: "k", voices: { pl: "b-pl" } },
+            cascade: { order: ["a", "b"] },
+          },
+          defaultEngine: "cascade",
+          scheduler: { concurrency: 4, tiers: [{ name: "play" }] },
+        },
+        { engineFactories: { a: () => slow, b: () => b.engine }, now: () => Date.parse("2026-11-14T10:00:00.000Z") },
+      );
+      const first = tts.synthesize({ text: "one", lang: "pl" });
+      const second = tts.synthesize({ text: "two", lang: "pl" });
+      await Promise.resolve();
+      refuse(new TtsError("quota-exhausted"));
+      for (let i = 0; i < delay; i++) await Promise.resolve();
+      // Same unit as the queued cascade attempt: it joins that job if still queued, else starts its own.
+      const direct = await tts.synthesize({ text: "two", lang: "pl", engine: "a" }).catch((error: unknown) => error);
+      expect(direct, `delay ${delay}`).toMatchObject({ engine: "a" });
+      expect(calls, `delay ${delay}`).toEqual(["one", "two"]);
+      expect(await first).toMatchObject({ engine: "b" });
+      expect(await second).toMatchObject({ engine: expect.stringMatching(/^[ab]$/) });
+    }
+  });
+
+  it("a direct request that joined a queued cascade attempt and aborted no longer keeps it going", async () => {
+    let refuse!: (error: unknown) => void;
+    const calls: string[] = [];
+    const slow: Engine = {
+      id: "a",
+      keyed: true,
+      voices: [{ id: "a-pl", label: "a", locale: "pl-PL", gender: "male", multilingual: false }],
+      synthesize(text) {
+        calls.push(text);
+        return new Promise((_resolve, reject) => {
+          refuse = reject;
+        });
+      },
+    };
+    const b = fakeEngine("b", true);
+    const tts = createTts(
+      {
+        engines: {
+          a: { apiKey: "k", maxConcurrent: 1, voices: { pl: "a-pl" } },
+          b: { apiKey: "k", voices: { pl: "b-pl" } },
+          cascade: { order: ["a", "b"] },
+        },
+        defaultEngine: "cascade",
+        scheduler: { concurrency: 4, tiers: [{ name: "play" }] },
+      },
+      { engineFactories: { a: () => slow, b: () => b.engine }, now: () => Date.parse("2026-11-14T10:00:00.000Z") },
+    );
+    const first = tts.synthesize({ text: "one", lang: "pl" });
+    const second = tts.synthesize({ text: "two", lang: "pl" });
+    const controller = new AbortController();
+    const direct = tts.synthesize({ text: "two", lang: "pl", engine: "a", signal: controller.signal });
+    controller.abort();
+    await expect(direct).rejects.toMatchObject({ name: "AbortError" });
+    await Promise.resolve();
+    refuse(new TtsError("quota-exhausted"));
+    expect(await first).toMatchObject({ engine: "b" });
+    // Only the cascade walk is left on the job: it skips at start and the walk moves on.
+    expect(await second).toMatchObject({ engine: "b" });
+    expect(calls).toEqual(["one"]);
+    expect(b.calls).toEqual(["one", "two"]);
+  });
+
   it("a member without a key reports no-key", () => {
     const { tts } = setup({ a: {}, b: { apiKey: "" }, edge: {}, cascade: { order: ["a", "b", "edge"] } });
     expect(tts.engineStatus("a")).toEqual({ state: "no-key" });
