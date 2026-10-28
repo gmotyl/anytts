@@ -39,6 +39,7 @@ export type EngineConfig = {
    * Default `true` for `edge`, `false` for every other engine.
    */
   pronunciation?: boolean;
+  /** Most attempts this engine runs at once; a waiting job keeps its tier priority. Default unlimited. */
   maxConcurrent?: number;
 } & Record<string, unknown>;
 
@@ -178,7 +179,10 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
   if (!engines.has(config.defaultEngine)) throw new RangeError(`default engine is not configured: ${config.defaultEngine}`);
 
   const cache = new LruCache<SynthesisResult>(config.cache);
-  const scheduler = createScheduler(config.scheduler);
+  // Engines without `maxConcurrent` are unlimited, bounded only by the scheduler's concurrency.
+  const slots: Record<string, number> = {};
+  for (const [id, { config: c }] of engines) if (c.maxConcurrent !== undefined) slots[id] = c.maxConcurrent;
+  const scheduler = createScheduler(config.scheduler, slots);
   const defaultTier = config.scheduler.tiers[0]?.name;
   const inFlight = new Map<string, InFlight>();
   // In-flight (`pending` / `drop`) listeners; cache events come straight from `LruCache`.
@@ -275,7 +279,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
       // Only a job still owned by callers stores its result.
       if (!controller.signal.aborted) cache.set(r.key, result);
       return result;
-    });
+    }, r.engineId);
     const flight: InFlight = { job, controller, callers: 0, phases };
     inFlight.set(r.key, flight);
     emit({ type: "pending", key: r.key });

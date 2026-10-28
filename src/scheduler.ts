@@ -7,6 +7,8 @@ export interface SchedulerConfig {
 
 export interface ScheduledJob<T> {
   readonly tier: string;
+  /** The slot group the job runs in (an engine id), if any. */
+  readonly slot?: string;
   readonly started: boolean;
   /** Settles with the job body's outcome; rejects `AbortError` when removed before starting. */
   readonly done: Promise<T>;
@@ -17,13 +19,20 @@ export interface ScheduledJob<T> {
 }
 
 export interface Scheduler {
-  /** Queues `run`; its slot is released when the returned promise settles. */
-  enqueue<T>(tier: string, run: () => Promise<T>): ScheduledJob<T>;
+  /**
+   * Queues `run`; its slot is released when the returned promise settles. A job with a `slot`
+   * group also waits for one of that group's slots, keeping its tier priority while it waits.
+   */
+  enqueue<T>(tier: string, run: () => Promise<T>, slot?: string): ScheduledJob<T>;
 }
+
+/** Slots per group (an engine id → its `maxConcurrent`); a group not listed is unlimited. */
+export type SlotLimits = Record<string, number>;
 
 interface Entry {
   seq: number;
   tier: number;
+  slot?: string;
   start: () => void;
 }
 
@@ -31,6 +40,14 @@ const abortError = (): Error =>
   typeof DOMException === "function"
     ? new DOMException("The job was removed", "AbortError")
     : Object.assign(new Error("The job was removed"), { name: "AbortError" });
+
+function validateSlots(slots: SlotLimits): void {
+  for (const [group, limit] of Object.entries(slots)) {
+    if (!Number.isInteger(limit) || limit < 1) {
+      throw new RangeError(`${group} maxConcurrent must be a positive integer, got ${limit}`);
+    }
+  }
+}
 
 function validate(config: SchedulerConfig): void {
   const { concurrency, tiers } = config;
@@ -48,8 +65,11 @@ function validate(config: SchedulerConfig): void {
   }
 }
 
-export function createScheduler(config: SchedulerConfig): Scheduler {
+export function createScheduler(config: SchedulerConfig, slots: SlotLimits = {}): Scheduler {
   validate(config);
+  validateSlots(slots);
+  // Running jobs per slot group.
+  const busy = new Map<string, number>();
   const tierIndex = new Map(config.tiers.map((t, i) => [t.name, i]));
   const caps = config.tiers.map((t) => t.cap);
   // inFlight[i] = running jobs of tier i
@@ -61,6 +81,11 @@ export function createScheduler(config: SchedulerConfig): Scheduler {
     const index = tierIndex.get(name);
     if (index === undefined) throw new RangeError(`unknown tier: ${name}`);
     return index;
+  };
+
+  const slotFree = (group: string | undefined): boolean => {
+    if (group === undefined || !Object.hasOwn(slots, group)) return true;
+    return (busy.get(group) ?? 0) < slots[group]!;
   };
 
   const canStart = (tier: number): boolean => {
@@ -81,7 +106,7 @@ export function createScheduler(config: SchedulerConfig): Scheduler {
     for (;;) {
       let next: Entry | undefined;
       for (const entry of waiting) {
-        if (!canStart(entry.tier)) continue;
+        if (!canStart(entry.tier) || !slotFree(entry.slot)) continue;
         if (!next || entry.tier < next.tier || (entry.tier === next.tier && entry.seq < next.seq)) next = entry;
       }
       if (!next) return;
@@ -91,8 +116,8 @@ export function createScheduler(config: SchedulerConfig): Scheduler {
   };
 
   return {
-    enqueue<T>(tierName: string, run: () => Promise<T>): ScheduledJob<T> {
-      const entry: Entry = { seq: seq++, tier: indexOf(tierName), start: () => {} };
+    enqueue<T>(tierName: string, run: () => Promise<T>, slot?: string): ScheduledJob<T> {
+      const entry: Entry = { seq: seq++, tier: indexOf(tierName), slot, start: () => {} };
       let state: "waiting" | "started" | "removed" = "waiting";
       let resolve!: (value: T) => void;
       let reject!: (reason: unknown) => void;
@@ -107,6 +132,8 @@ export function createScheduler(config: SchedulerConfig): Scheduler {
         state = "started";
         const tier = entry.tier;
         inFlight[tier]!++;
+        // Taken only on start: a job removed while waiting never held a slot to release.
+        if (slot !== undefined) busy.set(slot, (busy.get(slot) ?? 0) + 1);
         let body: Promise<T>;
         try {
           body = Promise.resolve(run());
@@ -115,6 +142,7 @@ export function createScheduler(config: SchedulerConfig): Scheduler {
         }
         body.then(resolve, reject).finally(() => {
           inFlight[tier]!--;
+          if (slot !== undefined) busy.set(slot, busy.get(slot)! - 1);
           pump();
         });
       };
@@ -126,6 +154,7 @@ export function createScheduler(config: SchedulerConfig): Scheduler {
         get tier() {
           return config.tiers[entry.tier]!.name;
         },
+        slot,
         get started() {
           return state === "started";
         },
