@@ -1,7 +1,8 @@
 import { LruCache } from "./cache.js";
 import { CASCADE, cachedMember, cascadeMembers, effectiveOrder, walkCascade, type CascadeMembers } from "./cascade.js";
-import type { Engine, VoiceMap } from "./engine.js";
+import type { Engine, EngineHooks, VoiceMap } from "./engine.js";
 import { createEdgeEngine, type EdgeEngineOptions } from "./engines/edge/engine.js";
+import { createRelayCascade, RELAY_ENGINES, type RelayCascade } from "./engines/relayEngine.js";
 import { isTransient, TtsError, UnknownEngineError } from "./errors.js";
 import { createScheduler, type ScheduledJob, type SchedulerConfig } from "./scheduler.js";
 import { applyPronunciation, type PronunciationMap } from "./text/pronunciation.js";
@@ -57,9 +58,20 @@ export type EngineConfig = {
   maxConcurrent?: number;
 } & Record<string, unknown>;
 
-/** `engines.cascade`: the member engines, tried in this order. No `voices` of its own. */
-export interface CascadeConfig {
-  order: string[];
+/**
+ * `engines.cascade`: the member engines, tried in this order (where the keys are: Node). No
+ * `voices` of its own. In the browser, `{ relayUrl }` instead: one relay call walks the chain.
+ */
+export type CascadeConfig = { order: string[] } | CascadeRelayConfig;
+
+/** A browser `cascade`: a relay client, no local walk. */
+export interface CascadeRelayConfig {
+  /** The relay endpoint (`createRelayHandler` from `anytts/server`). */
+  relayUrl: string;
+  /** Max wait for the relay's response headers (it answers once a member has spoken). Default 20000. */
+  firstByteMs?: number;
+  /** Max gap between body chunks. Default 8000. */
+  stallMs?: number;
 }
 
 export interface TtsConfig {
@@ -131,8 +143,11 @@ const DEFAULT_RATE_LIMIT_SECONDS = 60;
 
 type SkipKind = Exclude<EngineStatus["state"], "ready" | "no-key">;
 
-/** Browser-safe factories only; `anytts/server` adds the keyed engines. */
-const BUILTIN_ENGINES: Record<string, EngineFactory> = { edge: createEdgeEngine };
+/**
+ * Browser-safe factories only: `edge`, and relay clients for the keyed engine ids (they hold no key).
+ * `anytts/server` replaces the relay clients with the keyed engines.
+ */
+const BUILTIN_ENGINES: Record<string, EngineFactory> = { edge: createEdgeEngine, ...RELAY_ENGINES };
 
 const abortError = (): Error =>
   typeof DOMException === "function"
@@ -141,12 +156,15 @@ const abortError = (): Error =>
 
 interface Resolved {
   engineId: string;
-  engine: Engine;
   retries: number;
   voice: string;
   /** The text the engine speaks: the request text, respelled when the engine's pronunciation is on. */
   text: string;
   key: string;
+  /** One engine call. */
+  call(signal: AbortSignal, hooks: EngineHooks): Promise<SynthesisResult>;
+  /** Caches a result: under `key`, or (a browser cascade) under the member key plus `key` as its alias. */
+  store(result: SynthesisResult): void;
 }
 
 /** One caller's hooks and which of them it has already heard. */
@@ -213,6 +231,20 @@ const listen = (phases: Phases, req: SynthesisRequest): Listener => {
   return listener;
 };
 
+/** A `cascade` relay client; `order` and `voices` belong to the relay's (Node) config. */
+function relayCascadeFrom(config: Record<string, unknown>): RelayCascade {
+  if (config.order !== undefined) throw new RangeError("cascade takes either order (a local walk) or relayUrl (a relay client), not both");
+  if (config.voices !== undefined) throw new RangeError("cascade has no voices: set them per member");
+  return createRelayCascade(config);
+}
+
+/** Canonical form of the options a cascade request carries: same meaning, same string. */
+function cascadeOptionsHash(req: SynthesisRequest): string {
+  const sorted = <T>(record: Record<string, T> | undefined): [string, T][] =>
+    Object.entries(record ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return JSON.stringify([sorted(req.voices), req.order === undefined ? null : [...new Set(req.order)], sorted(req.pronunciation)]);
+}
+
 export function createTts(config: TtsConfig, internals: CreateTtsInternals = {}): Tts {
   const factories = { ...BUILTIN_ENGINES, ...internals.engineFactories };
   // `config` is the engine's effective config: unset `voices` / `maxConcurrent` take the engine's defaults.
@@ -235,8 +267,11 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     });
   }
   const cascadeConfig: Record<string, unknown> | undefined = Object.hasOwn(config.engines, CASCADE) ? config.engines[CASCADE] : undefined;
-  const members = cascadeConfig ? cascadeMembers(cascadeConfig, (id) => engines.has(id)) : undefined;
-  if (!engines.has(config.defaultEngine) && !(config.defaultEngine === CASCADE && members)) throw new RangeError(`default engine is not configured: ${config.defaultEngine}`);
+  // `{ relayUrl }` makes the cascade a relay client (the browser); `{ order }` walks locally.
+  const relayCascade: RelayCascade | undefined = cascadeConfig && cascadeConfig.relayUrl !== undefined ? relayCascadeFrom(cascadeConfig) : undefined;
+  const members = cascadeConfig && !relayCascade ? cascadeMembers(cascadeConfig, (id) => engines.has(id)) : undefined;
+  const hasCascade = members !== undefined || relayCascade !== undefined;
+  if (!engines.has(config.defaultEngine) && !(config.defaultEngine === CASCADE && hasCascade)) throw new RangeError(`default engine is not configured: ${config.defaultEngine}`);
 
   const cache = new LruCache<SynthesisResult>(config.cache);
   // Engines without an effective `maxConcurrent` are unlimited, bounded only by the scheduler's concurrency.
@@ -276,6 +311,15 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
    * Throws RangeError for an unconfigured engine and `unknown-voice` for a voice outside its catalog.
    * `pronounce` overrides the engine's `pronunciation` setting (a cascade request's per-member flag).
    */
+  /** The text engine `engineId` speaks for `req`: respelled when its pronunciation is on and `lang` is given. */
+  const prepareText = (engineId: string, req: SynthesisRequest, pronounceOverride?: boolean): string => {
+    const pronounce = pronounceOverride ?? engines.get(engineId)?.config.pronunciation ?? engineId === "edge";
+    return pronounce && req.lang !== undefined ? applyPronunciation(req.text, req.lang, config.pronunciation) : req.text;
+  };
+
+  // Built on the prepared text, so the same request text with and without a map never collides.
+  const memberKey = (engineId: string, voice: string, text: string): string => JSON.stringify([engineId, voice, text]);
+
   const resolveEngine = (engineId: string, req: SynthesisRequest, voiceOverride?: string, pronounceOverride?: boolean): Resolved => {
     const entry = engines.get(engineId);
     if (!entry) throw new UnknownEngineError(engineId);
@@ -285,22 +329,60 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     if (!entry.engine.voices.some((v) => v.id === voice)) {
       throw new TtsError("unknown-voice", `voice ${voice} is not in the ${engineId} catalog`);
     }
-    const pronounce = pronounceOverride ?? entry.config.pronunciation ?? engineId === "edge";
-    const text = pronounce && req.lang !== undefined ? applyPronunciation(req.text, req.lang, config.pronunciation) : req.text;
+    const text = prepareText(engineId, req, pronounceOverride);
+    const key = memberKey(engineId, voice, text);
     return {
       engineId,
-      engine: entry.engine,
       retries: entry.config.retries ?? DEFAULT_RETRIES,
       voice,
       text,
-      // Built on the prepared text, so the same request text with and without a map never collides.
-      key: JSON.stringify([engineId, voice, text]),
+      key,
+      call: async (signal, hooks) => ({
+        bytes: await entry.engine.synthesize(text, voice, signal, hooks),
+        mime: "audio/mpeg",
+        engine: engineId,
+        voice,
+      }),
+      store: (result) => cache.set(key, result),
+    };
+  };
+
+  /**
+   * A browser cascade request: one relay call, keyed by the Cascade alias `(cascade, lang,
+   * optionsHash, text)`. Its result is cached under the member key the relay names (built as a
+   * direct request to that member would build it) and the alias points at that entry.
+   */
+  const resolveRelayCascade = (req: SynthesisRequest): Resolved => {
+    // One voice id cannot name voices of several engines.
+    if (req.voice !== undefined) throw new TtsError("unknown-voice", "a cascade request takes `voices` per member, not `voice`");
+    const key = JSON.stringify([CASCADE, req.lang ?? null, cascadeOptionsHash(req), req.text]);
+    const body = {
+      text: req.text,
+      ...(req.lang !== undefined ? { lang: req.lang } : {}),
+      ...(req.voices !== undefined ? { voices: req.voices } : {}),
+      ...(req.order !== undefined ? { order: req.order } : {}),
+      ...(req.pronunciation !== undefined ? { pronunciation: req.pronunciation } : {}),
+    };
+    return {
+      engineId: CASCADE,
+      retries: typeof cascadeConfig!.retries === "number" ? cascadeConfig!.retries : DEFAULT_RETRIES,
+      voice: "",
+      text: req.text,
+      key,
+      call: async (signal, hooks) => ({ ...(await relayCascade!.synthesize(body, signal, hooks)), mime: "audio/mpeg" }),
+      store: (result) => {
+        const pronounce = req.pronunciation && Object.hasOwn(req.pronunciation, result.engine) ? req.pronunciation[result.engine] : undefined;
+        const member = memberKey(result.engine, result.voice, prepareText(result.engine, req, pronounce));
+        cache.set(member, result);
+        cache.alias(key, member);
+      },
     };
   };
 
   const resolve = (req: SynthesisRequest): Resolved => resolveEngine(req.engine ?? config.defaultEngine, req, req.voice);
 
   const isCascade = (req: SynthesisRequest): boolean => members !== undefined && (req.engine ?? config.defaultEngine) === CASCADE;
+  const isRelayCascade = (req: SynthesisRequest): boolean => relayCascade !== undefined && (req.engine ?? config.defaultEngine) === CASCADE;
 
   const now = internals.now ?? Date.now;
   /** Open skip windows by member id; `until` is epoch ms, `Infinity` for the instance's life. */
@@ -393,8 +475,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
         },
       };
       try {
-        const bytes = await r.engine.synthesize(r.text, r.voice, current.controller.signal, hooks);
-        return { bytes, mime: "audio/mpeg", engine: r.engineId, voice: r.voice };
+        return await r.call(current.controller.signal, hooks);
       } catch (caught) {
         // An engine call ended by `restartStalled` fails with the restart's reason; a job abort stays as is.
         const { reason } = current.controller.signal;
@@ -416,7 +497,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
       reach(phases, "started");
       const result = await attempt(r, controller.signal, phases);
       // Only a job still owned by callers stores its result.
-      if (!controller.signal.aborted) cache.set(r.key, result);
+      if (!controller.signal.aborted) r.store(result);
       return result;
     }, r.engineId);
     const flight: InFlight = { job, controller, callers: 0, phases };
@@ -429,6 +510,14 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
 
   const synthesize = (req: SynthesisRequest): Promise<SynthesisResult> => {
     if (isCascade(req)) return synthesizeCascade(req);
+    if (isRelayCascade(req)) {
+      // The relay keeps the skip windows; the browser opens none for its cascade.
+      try {
+        return synthesizeResolved(resolveRelayCascade(req), req);
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
     let r: Resolved;
     try {
       r = resolve(req);
@@ -563,6 +652,8 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     isCached(req) {
       try {
         if (isCascade(req)) return req.voice === undefined && cachedMember(effectiveOrder(members!, req.order), cascadeMembersFor(req)) !== undefined;
+        // A browser cascade reads its alias: nothing is known about it before the relay's first answer.
+        if (isRelayCascade(req)) return cache.has(resolveRelayCascade(req).key);
         return cache.has(resolve(req).key);
       } catch {
         return false;
@@ -571,7 +662,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     state(req) {
       try {
         if (isCascade(req)) return cascadeState(req);
-        const { key } = resolve(req);
+        const { key } = isRelayCascade(req) ? resolveRelayCascade(req) : resolve(req);
         return cache.has(key) ? "ready" : inFlight.has(key) ? "pending" : "cold";
       } catch {
         return "cold";
@@ -610,7 +701,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     new Map([
       ...[...engines].map(([id, { engine, config: c }]) => [id, { voices: c.voices ?? {}, catalog: engine.voices }] as const),
       // The cascade has no voices of its own.
-      ...(members ? [[CASCADE, { voices: {}, catalog: [] }] as const] : []),
+      ...(hasCascade ? [[CASCADE, { voices: {}, catalog: [] }] as const] : []),
     ]),
   );
   return tts;

@@ -95,34 +95,31 @@ it("main entry ships no keyed engine code", async () => {
   expect(out.code).toContain("speech.platform.bing.com");
   for (const marker of KEYED_MARKERS) expect(out.code).not.toContain(marker);
 
-  // `anytts/server` registers the keyed factories; the main entry does not.
+  // `anytts/server` registers the keyed factories; the main entry registers relay clients for the
+  // same ids (and `cascade`), which hold no key and need a relayUrl.
   writeFileSync(
     join(dir, "keyed.mjs"),
     `
 import { createTts } from "anytts";
 import { createTts as createServerTts } from "anytts/server";
 const scheduler = { concurrency: 1, tiers: [{ name: "play" }] };
+const relayUrl = "https://relay.test/tts";
 const ids = ["elevenlabs", "cartesia", "speechify", "azure"];
+const attempt = (create, config) => { try { create(config); return "ok"; } catch (e) { return e.name; } };
 const result = {};
 for (const id of ids) {
   const config = { engines: { [id]: {} }, defaultEngine: id, scheduler };
-  let main;
-  try { createTts(config); main = "ok"; } catch (e) { main = e.name; }
-  let server;
-  try { createServerTts(config); server = "ok"; } catch (e) { server = e.name; }
-  result[id] = { main, server };
+  const relayed = { engines: { [id]: { relayUrl } }, defaultEngine: id, scheduler };
+  result[id] = { main: attempt(createTts, relayed), mainWithoutRelay: attempt(createTts, config), server: attempt(createServerTts, config) };
 }
+result.cascade = { main: attempt(createTts, { engines: { cascade: { relayUrl } }, defaultEngine: "cascade", scheduler }) };
 console.log(JSON.stringify(result));
 `,
   );
   const result = JSON.parse(execFileSync("node", ["keyed.mjs"], { cwd: dir, encoding: "utf8" })) as Record<
     string,
-    { main: string; server: string }
+    Record<string, string>
   >;
-  expect(result).toEqual({
-    elevenlabs: { main: "RangeError", server: "ok" },
-    cartesia: { main: "RangeError", server: "ok" },
-    speechify: { main: "RangeError", server: "ok" },
-    azure: { main: "RangeError", server: "ok" },
-  });
+  const keyed = { main: "ok", mainWithoutRelay: "RangeError", server: "ok" };
+  expect(result).toEqual({ elevenlabs: keyed, cartesia: keyed, speechify: keyed, azure: keyed, cascade: { main: "ok" } });
 });
