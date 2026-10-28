@@ -452,6 +452,49 @@ describe("cascade skip windows", () => {
     expect(b.calls).toEqual(["one", "two"]);
   });
 
+  it("a direct request whose join promotes a queued cascade attempt into a start still reaches the engine", async () => {
+    let release!: (bytes: ArrayBuffer) => void;
+    const holder: Engine = {
+      id: "b",
+      keyed: true,
+      voices: [{ id: "b-pl", label: "b", locale: "pl-PL", gender: "male", multilingual: false }],
+      synthesize() {
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      },
+    };
+    const a = fakeEngine("a", true);
+    const tts = createTts(
+      {
+        engines: {
+          a: { apiKey: "k", voices: { pl: "a-pl" } },
+          b: { apiKey: "k", voices: { pl: "b-pl" } },
+          cascade: { order: ["a", "b"] },
+        },
+        defaultEngine: "cascade",
+        scheduler: { concurrency: 4, tiers: [{ name: "play" }, { name: "warm", cap: 1 }] },
+      },
+      { engineFactories: { a: () => a.engine, b: () => holder }, now: () => Date.parse("2026-11-14T10:00:00.000Z") },
+    );
+    // Holds the only warm slot.
+    const hold = tts.synthesize({ text: "hold", lang: "pl", engine: "b", tier: "warm" });
+    // The cascade's attempt at `a` queues behind it, before any window is open.
+    const warm = tts.synthesize({ text: "two", lang: "pl", tier: "warm" });
+    // A play request refused by `a` opens its skip window while that attempt waits.
+    a.fail(() => new TtsError("quota-exhausted"));
+    await expect(tts.synthesize({ text: "one", lang: "pl", engine: "a", tier: "play" })).rejects.toMatchObject({ kind: "quota-exhausted" });
+    a.fail(undefined);
+    expect(tts.engineStatus("a")).toMatchObject({ state: "quota-exhausted" });
+    // Same unit as the queued attempt: joining promotes it to play, which starts it at once.
+    const direct = await tts.synthesize({ text: "two", lang: "pl", engine: "a", tier: "play" }).catch((error: unknown) => error);
+    expect(direct).toMatchObject({ engine: "a" });
+    expect(a.calls).toEqual(["one", "two"]);
+    expect(await warm).toMatchObject({ engine: "a" });
+    release(new Uint8Array([1]).buffer);
+    expect(await hold).toMatchObject({ engine: "b" });
+  });
+
   it("a member without a key reports no-key", () => {
     const { tts } = setup({ a: {}, b: { apiKey: "" }, edge: {}, cascade: { order: ["a", "b", "edge"] } });
     expect(tts.engineStatus("a")).toEqual({ state: "no-key" });

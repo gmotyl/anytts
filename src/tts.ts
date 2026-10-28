@@ -617,15 +617,28 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
 
     const tier = req.tier ?? defaultTier ?? "";
     let flight = inFlight.get(r.key);
-    try {
-      // The scheduler throws RangeError for an unknown tier; surface it as a rejection.
-      if (flight) flight.job.promote(tier);
-      else flight = start(r, tier);
-    } catch (error) {
-      return Promise.reject(error);
+    if (flight) {
+      // Counted before `promote`: it may start the job synchronously, and the start-time skip check
+      // and any `onStart` abort must already see this caller.
+      flight.callers++;
+      if (!viaCascade) flight.direct++;
+      try {
+        flight.job.promote(tier);
+      } catch (error) {
+        // The scheduler throws RangeError for an unknown tier; surface it as a rejection.
+        flight.callers--;
+        if (!viaCascade) flight.direct--;
+        return Promise.reject(error);
+      }
+    } else {
+      try {
+        flight = start(r, tier);
+      } catch (error) {
+        return Promise.reject(error);
+      }
+      flight.callers++;
+      if (!viaCascade) flight.direct++;
     }
-    flight.callers++;
-    if (!viaCascade) flight.direct++;
     const joined = flight;
     const listener = listen(joined.phases, req);
 
