@@ -3,6 +3,7 @@ import type { Engine } from "./engine.js";
 import { createEdgeEngine, type EdgeEngineOptions } from "./engines/edge/engine.js";
 import { isTransient, TtsError } from "./errors.js";
 import { createScheduler, type ScheduledJob, type SchedulerConfig } from "./scheduler.js";
+import { applyPronunciation, type PronunciationMap } from "./text/pronunciation.js";
 import { registerVoiceSource } from "./voices.js";
 
 export interface SynthesisRequest {
@@ -30,16 +31,24 @@ export interface SynthesisResult {
 }
 
 export type EngineConfig = {
-  voices: Record<string, string> & { default: string };
+  voices?: Record<string, string> & { default?: string };
   /** Extra attempts after a transient failure. Default 1. */
   retries?: number;
-} & EdgeEngineOptions;
+  /**
+   * Respell the text with the request language's Pronunciation map before this engine speaks it.
+   * Default `true` for `edge`, `false` for every other engine.
+   */
+  pronunciation?: boolean;
+  maxConcurrent?: number;
+} & Record<string, unknown>;
 
 export interface TtsConfig {
   engines: Record<string, EngineConfig>;
   defaultEngine: string;
   scheduler: SchedulerConfig;
   cache?: { max?: number };
+  /** Extra Pronunciation map entries per language, over the built-in preset (`pl`). */
+  pronunciation?: Record<string, PronunciationMap>;
 }
 
 /**
@@ -88,6 +97,8 @@ interface Resolved {
   engine: Engine;
   retries: number;
   voice: string;
+  /** The text the engine speaks: the request text, respelled when the engine's pronunciation is on. */
+  text: string;
   key: string;
 }
 
@@ -161,7 +172,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
   for (const [id, engineConfig] of Object.entries(config.engines)) {
     const factory = Object.hasOwn(factories, id) ? factories[id] : undefined;
     if (!factory) throw new RangeError(`unknown engine: ${id}`);
-    const { voices: _voices, retries: _retries, ...options } = engineConfig;
+    const { voices: _voices, retries: _retries, pronunciation: _pronunciation, maxConcurrent: _maxConcurrent, ...options } = engineConfig;
     engines.set(id, { engine: factory(options), config: engineConfig });
   }
   if (!engines.has(config.defaultEngine)) throw new RangeError(`default engine is not configured: ${config.defaultEngine}`);
@@ -202,21 +213,26 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     const engineId = req.engine ?? config.defaultEngine;
     const entry = engines.get(engineId);
     if (!entry) throw new RangeError(`engine is not configured: ${engineId}`);
-    const { voices } = entry.config;
+    const voices = entry.config.voices ?? {};
     const voice = req.voice ?? (req.lang !== undefined && Object.hasOwn(voices, req.lang) ? voices[req.lang] : undefined) ?? voices.default;
+    if (voice === undefined) throw new TtsError("unknown-voice", `${engineId} has no voice for ${req.lang ?? "default"}`);
     if (!entry.engine.voices.some((v) => v.id === voice)) {
       throw new TtsError("unknown-voice", `voice ${voice} is not in the ${engineId} catalog`);
     }
+    const pronounce = entry.config.pronunciation ?? engineId === "edge";
+    const text = pronounce && req.lang !== undefined ? applyPronunciation(req.text, req.lang, config.pronunciation) : req.text;
     return {
       engineId,
       engine: entry.engine,
       retries: entry.config.retries ?? DEFAULT_RETRIES,
       voice,
-      key: JSON.stringify([engineId, voice, req.text]),
+      text,
+      // Built on the prepared text, so the same request text with and without a map never collides.
+      key: JSON.stringify([engineId, voice, text]),
     };
   };
 
-  const attempt = async (r: Resolved, text: string, signal: AbortSignal, phases: Phases): Promise<SynthesisResult> => {
+  const attempt = async (r: Resolved, signal: AbortSignal, phases: Phases): Promise<SynthesisResult> => {
     for (let tries = 0; ; tries++) {
       // An `onStart` hook may have aborted the only caller: no engine call for nobody.
       if (signal.aborted) throw abortError();
@@ -234,7 +250,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
         },
       };
       try {
-        const bytes = await r.engine.synthesize(text, r.voice, current.controller.signal, hooks);
+        const bytes = await r.engine.synthesize(r.text, r.voice, current.controller.signal, hooks);
         return { bytes, mime: "audio/mpeg", engine: r.engineId, voice: r.voice };
       } catch (caught) {
         // An engine call ended by `restartStalled` fails with the restart's reason; a job abort stays as is.
@@ -249,13 +265,13 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     }
   };
 
-  const start = (r: Resolved, text: string, tier: string): InFlight => {
+  const start = (r: Resolved, tier: string): InFlight => {
     const controller = new AbortController();
     // Created before enqueue: a free slot may run the job synchronously.
     const phases = newPhases();
     const job = scheduler.enqueue(tier, async () => {
       reach(phases, "started");
-      const result = await attempt(r, text, controller.signal, phases);
+      const result = await attempt(r, controller.signal, phases);
       // Only a job still owned by callers stores its result.
       if (!controller.signal.aborted) cache.set(r.key, result);
       return result;
@@ -293,7 +309,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     try {
       // The scheduler throws RangeError for an unknown tier; surface it as a rejection.
       if (flight) flight.job.promote(tier);
-      else flight = start(r, req.text, tier);
+      else flight = start(r, tier);
     } catch (error) {
       return Promise.reject(error);
     }
@@ -381,7 +397,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
   };
   registerVoiceSource(
     tts,
-    new Map([...engines].map(([id, { engine, config: c }]) => [id, { voices: c.voices, catalog: engine.voices }])),
+    new Map([...engines].map(([id, { engine, config: c }]) => [id, { voices: c.voices ?? {}, catalog: engine.voices }])),
   );
   return tts;
 }
