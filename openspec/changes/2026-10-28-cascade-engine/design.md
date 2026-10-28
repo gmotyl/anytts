@@ -102,16 +102,17 @@ tts.synthesize({
 
 ```mermaid
 flowchart TD
-  start(["cascade request"]) --> pick["next member in effective order"]
+  start(["cascade request"]) --> prep["prepare every member that may be tried (unknown-voice rejects here)"]
+  prep --> cached{"any member key cached? (skipped members included)"}
+  cached -->|"yes, first in order"| done(["resolve from cache"])
+  cached -->|"no"| pick["next member in effective order"]
   pick --> none{"any left?"}
-  none -->|"no"| fail(["reject with the last error (or last skip reason)"])
+  none -->|"no"| fail(["reject with the last attempted error, earlier ones in cause (or the last skip reason)"])
   none -->|"yes"| key{"has apiKey (or keyless)?"}
   key -->|"no"| pick
   key -->|"yes"| win{"inside a skip window?"}
   win -->|"yes"| pick
-  win -->|"no"| cached{"member key cached?"}
-  cached -->|"yes"| done(["resolve from cache"])
-  cached -->|"no"| slot["wait for an engine slot"]
+  win -->|"no"| slot["wait for an engine slot"]
   slot --> attempt["attempt (with the member's retries)"]
   attempt --> ok{"result"}
   ok -->|"audio"| store(["cache under member key, resolve"])
@@ -121,18 +122,21 @@ flowchart TD
 ```
 
 - **Cache lookups first:** before any network work, the chain checks the member keys in effective
-  order and the first cached one wins — so an already-synthesized unit never costs quota.
+  order — skipped members included, since a skip reason only rules out requests — and the first
+  cached one wins, so an already-synthesized unit never costs quota.
 - **Waiting, not hopping:** a member whose slots are all taken is waited for (the job keeps its
   tier priority). Hopping would change the voice mid-answer for a momentary limit.
-- **Final error:** the error of the last member actually attempted; if every member was skipped
-  without an attempt, the skip reason of the last skipped member (e.g. `quota-exhausted`).
+- **Final error:** the error of the last member actually attempted (a copy whose `cause` is the
+  earlier attempts' errors, as an array in order, when there were any); if every member was skipped
+  without an attempt, the skip reason of the last skipped member (e.g. `quota-exhausted`; a member
+  without a key has kind `unauthorized` there, while `engineStatus` says `no-key`).
 - **Abort** releases the slot and stops the chain.
 
 ### Error kinds and skip windows
 
 | Kind | Raised when (per engine, confirmed against the provider in its task) | Skip window |
 |---|---|---|
-| `quota-exhausted` | the provider refuses because the period's characters/credits are used | until 00:00 UTC on the 1st of next month |
+| `quota-exhausted` | the provider refuses because the period's characters/credits are used (402; Azure 403/429 with a "quota" message) | until 00:00 UTC on the 1st of next month |
 | `unauthorized` | the key is missing, invalid or revoked | for the life of the instance |
 | `rate-limited` | HTTP 429 (Azure F0 concurrency included), with `retryAfter` seconds from `Retry-After` | `retryAfter`, else 60 s |
 
@@ -150,7 +154,8 @@ passes that instance as the relay's `tts`, see Relay protocol).
 
 The exact status/body each provider returns for an exhausted quota is an open research point
 (tts-providers wiki); each keyed engine's task pins it from the provider's docs and a recorded
-fixture, and anything unrecognised maps to `rejected` (moves on, no window).
+fixture, and anything unrecognised maps to `rejected` (moves on, no window) — except a 5xx, which
+is `network` (see Decisions during implementation).
 
 ## Pronunciation
 
@@ -180,7 +185,8 @@ fixture, and anything unrecognised maps to `rejected` (moves on, no window).
   consumer share it — read `engineStatus` from the instance whose skip windows the relay fills, and
   swap keys by building a new instance and a new handler (skip windows reset, which a new key
   wants anyway). Unknown `engine` → `400 { kind:
-  "unknown-voice" }` (the engine/voice pair cannot be served).
+  "unknown-voice" }` (the engine/voice pair cannot be served). A cascade `order` that leaves no
+  member → `400 { error }`.
 - `200` responses carry `x-anytts-engine` and `x-anytts-voice` (the member that spoke).
 - Errors: `502 { kind, retryAfter? }`; `rate-limited` also sets `Retry-After`.
 - `authorize` stays optional (Q17): no check at creation; the README warns that a relay serving
@@ -192,6 +198,30 @@ fixture, and anything unrecognised maps to `rejected` (moves on, no window).
   the request to it; `engine`/`voice` in the result come from the response headers.
 - A cascade result is cached under the member key from the headers **and** the cascade alias.
 - Relay errors keep their kind and `retryAfter`; the normal retry rules apply.
+
+## Decisions during implementation
+
+- **Cache before skip.** The walk looks up every member's key (skipped ones included) before the
+  skip check, so a spent member's earlier results still answer (flowchart above).
+- **Direct refusals open windows.** A `quota-exhausted` / `unauthorized` / `rate-limited` from a
+  direct (non-cascade) request opens the engine's skip window too, so `engineStatus` reports it;
+  the window steers the cascade only and never blocks direct requests.
+- **Windows never shrink.** A later refusal does not shorten an open window or replace a longer
+  one's kind.
+- **Explicit `engine: "edge"` at the relay** goes through the shared `tts` instance (its cache,
+  scheduler and pronunciation) when it configures `edge`; a body without `engine` stays on the
+  standalone Edge engine.
+- **402 → `quota-exhausted`:** ElevenLabs `payment_required` (plus 401 `quota_exceeded`),
+  Speechify `payment_required`, and Cartesia's bare 402 (no `error_code`; `quota_exceeded` by code
+  at any status).
+- **5xx → `network`** (transient): a provider's own failure is retried and then cascades, instead
+  of being final `rejected`.
+- **Azure 403/429 with a "quota" message → `quota-exhausted`** (F0 monthly exhaustion); any other
+  401/403 is `unauthorized`, a plain 429 `rate-limited`.
+- **Empty effective cascade `order` → 400 at the relay** (`EmptyCascadeOrderError`, a
+  `RangeError`), not a 502.
+- **Final error carries the chain:** earlier attempts' errors sit on the final error's `cause` as an
+  array.
 
 ## Testing
 
