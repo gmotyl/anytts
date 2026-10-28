@@ -112,9 +112,9 @@ interface TtsConfig { /* existing */ pronunciation?: Record<string, Pronunciatio
 - "missing key rejects without a request"
 - "abort cancels the fetch"
 
-- [ ] **Step 1: Write the failing tests** — Run: `corepack pnpm exec vitest run src/engines/elevenlabs` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: same — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/engines && git commit -m "feat(engines): keyed engine base and ElevenLabs"`
+- [x] **Step 1: Write the failing tests** — Run: `corepack pnpm exec vitest run src/engines/elevenlabs` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: same — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/engines && git commit -m "feat(engines): keyed engine base and ElevenLabs"`
 
 ### Task 5: Cartesia engine
 
