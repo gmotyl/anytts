@@ -1,0 +1,11 @@
+{
+  "_source": "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/rest-text-to-speech#http-status-codes",
+  "_verified": "assumed: 403 is not in the documented status table; Cognitive Services answers 403 for a disabled resource or exhausted F0 quota, and the design maps it to unauthorized like 401. Body is illustrative",
+  "status": 403,
+  "body": {
+    "error": {
+      "code": "403",
+      "message": "Out of call volume quota. Quota will be replenished in 2.00 days."
+    }
+  }
+}

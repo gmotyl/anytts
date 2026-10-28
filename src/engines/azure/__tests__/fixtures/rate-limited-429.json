@@ -1,0 +1,15 @@
+{
+  "_source": [
+    "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/rest-text-to-speech#http-status-codes",
+    "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-services-quotas-and-limits#real-time-text-to-speech"
+  ],
+  "_verified": "429 Too many requests (quota or rate exceeded) is documented; F0 allows 20 transactions per 60 seconds and most standard-voice 429s are regional voice capacity. Retry-After is not mentioned in the docs (assumed; the engine reads it when present); body is illustrative",
+  "status": 429,
+  "headers": { "retry-after": "12" },
+  "body": {
+    "error": {
+      "code": "429",
+      "message": "Too many requests."
+    }
+  }
+}

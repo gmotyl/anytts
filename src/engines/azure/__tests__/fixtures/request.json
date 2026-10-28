@@ -1,0 +1,21 @@
+{
+  "_source": [
+    "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/rest-text-to-speech",
+    "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/rest-text-to-speech#audio-outputs"
+  ],
+  "_verified": "2026-10-28 against the docs above (no live call): regional endpoint table, required Content-Type / X-Microsoft-OutputFormat / User-Agent headers, Ocp-Apim-Subscription-Key accepted on every endpoint format, SSML sample shape, audio-24khz-48kbitrate-mono-mp3 in the streaming format list",
+  "method": "POST",
+  "url": "https://{region}.tts.speech.microsoft.com/cognitiveservices/v1",
+  "headers": {
+    "ocp-apim-subscription-key": "<key>",
+    "content-type": "application/ssml+xml",
+    "x-microsoft-outputformat": "audio-24khz-48kbitrate-mono-mp3",
+    "user-agent": "anytts"
+  },
+  "body": "<speak version='1.0' xml:lang='{lang}'><voice xml:lang='{lang}' name='{voice}'>{escaped text}</voice></speak>",
+  "_notes": [
+    "The docs' sample uses Authorization: Bearer; the same page says Ocp-Apim-Subscription-Key with the resource key works with all endpoint formats, which avoids the token exchange.",
+    "User-Agent is required and must be under 255 characters.",
+    "Audio is truncated at 10 minutes per request."
+  ]
+}
