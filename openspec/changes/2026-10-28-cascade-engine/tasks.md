@@ -301,9 +301,9 @@ interface RelayHandlerOptions { maxChars?: number; authorize?: (req: Request) =>
 - "a shared instance reports the relay's skip windows"
 - "no authorization hook serves the request"
 
-- [ ] **Step 1: Write the failing tests** — Run: `corepack pnpm exec vitest run src/server` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: same — Expected: PASS
-- [ ] **Step 3: Commit** — `git commit -am "feat(relay): serve every engine, shared Tts instance"`
+- [x] **Step 1: Write the failing tests** — Run: `corepack pnpm exec vitest run src/server` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: same — Expected: PASS
+- [x] **Step 3: Commit** — `git commit -am "feat(relay): serve every engine, shared Tts instance"`
 
 ### Task 12: Browser relay clients and the cascade alias
 
