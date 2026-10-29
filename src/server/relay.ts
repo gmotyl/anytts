@@ -48,8 +48,10 @@ const isBooleanRecord = (v: unknown): v is Record<string, boolean> =>
 function parseTtsBody(engine: string, body: Record<string, unknown>): SynthesisRequest | string {
   const { text, voice, lang, voices, order, pronunciation } = body;
   if (engine !== "cascade") {
-    if (typeof text !== "string" || typeof voice !== "string") return "expected { engine, text: string, voice: string }";
-    return { engine, text, voice };
+    if (typeof text !== "string" || typeof voice !== "string" || (lang !== undefined && typeof lang !== "string")) {
+      return "expected { engine, text: string, voice: string, lang? }";
+    }
+    return { engine, text, voice, ...(lang !== undefined ? { lang } : {}) };
   }
   if (
     typeof text !== "string" ||

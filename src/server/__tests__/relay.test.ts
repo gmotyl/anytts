@@ -445,3 +445,45 @@ describe("relay serves every engine", () => {
     expect(azure.synthesize).not.toHaveBeenCalled();
   });
 });
+
+describe("relay", () => {
+  /** A relay whose `tts` serves a keyed `speechify` fake, with a spy on `tts.synthesize`. */
+  function speechifyRelay() {
+    const speechify = fakeKeyed("speechify");
+    const tts = createTts(
+      { engines: { speechify: { apiKey: "k" } }, defaultEngine: "speechify", scheduler: { concurrency: 2, tiers: [{ name: "play" }] } },
+      { engineFactories: { speechify: () => speechify.engine } },
+    );
+    const ttsSynthesize = vi.spyOn(tts, "synthesize");
+    return { speechify, ttsSynthesize, handler: createRelayHandlerWith(fakeEngine().engine, { tts }) };
+  }
+
+  it("forwards lang on a direct request", async () => {
+    const { speechify, ttsSynthesize, handler } = speechifyRelay();
+    const res = await handler(post({ engine: "speechify", text: "Cześć", voice: "speechify-pl", lang: "pl" }));
+    expect(res.status).toBe(200);
+    expect(ttsSynthesize).toHaveBeenCalledWith(expect.objectContaining({ engine: "speechify", voice: "speechify-pl", lang: "pl" }));
+    expect(speechify.synthesize).toHaveBeenCalledWith("Cześć", "speechify-pl", expect.any(AbortSignal), expect.anything(), "pl");
+
+    // Without lang the request carries no lang key.
+    const plain = await handler(post({ engine: "speechify", text: "Hej", voice: "speechify-pl" }));
+    expect(plain.status).toBe(200);
+    expect(ttsSynthesize.mock.calls[1]![0]).not.toHaveProperty("lang");
+  });
+
+  it("rejects a non-string lang on a direct request", async () => {
+    const { speechify, ttsSynthesize, handler } = speechifyRelay();
+    const res = await handler(post({ engine: "speechify", text: "Cześć", voice: "speechify-pl", lang: 1 }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: expect.stringContaining("lang?") });
+    expect(ttsSynthesize).not.toHaveBeenCalled();
+    expect(speechify.synthesize).not.toHaveBeenCalled();
+  });
+
+  it("the edge-only relay ignores lang", async () => {
+    const { engine, synthesize } = fakeEngine();
+    const res = await createRelayHandlerWith(engine)(post({ text: "Hello", voice: VOICE, lang: "pl" }));
+    expect(res.status).toBe(200);
+    expect(synthesize).toHaveBeenCalledWith("Hello", VOICE, expect.any(AbortSignal));
+  });
+});

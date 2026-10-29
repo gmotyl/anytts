@@ -28,8 +28,8 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
 export type CreateRelayHandlerOptions = RelayHandlerOptions;
 
 /**
- * Fetch-standard relay: `POST { engine?, text, voice }` or `POST { engine: "cascade", text, lang?, … }`
- * → `200 audio/mpeg` with `x-anytts-engine` / `x-anytts-voice`, or `400/403/413/502` JSON
+ * Fetch-standard relay: `POST { engine?, text, voice, lang? }` (Edge ignores `lang`) or
+ * `POST { engine: "cascade", text, lang?, … }` → `200 audio/mpeg` with `x-anytts-engine` / `x-anytts-voice`, or `400/403/413/502` JSON
  * (`{ kind }` for unknown voices; `{ kind, retryAfter? }` plus `Retry-After` for engine failures).
  * Without `engine` Edge serves the request; every other engine needs `tts`.
  */

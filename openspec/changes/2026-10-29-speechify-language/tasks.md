@@ -128,9 +128,9 @@ locale comes from `SPEECHIFY_VOICES`.
 - "relay client > sends lang on a direct keyed request when the request has one"
 - "relay client > omits lang when the request has none"
 
-- [ ] **Step 1: Write the failing tests** — Run: `corepack pnpm vitest run src/server/__tests__/relay.test.ts src/engines/__tests__/relayEngine.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: `corepack pnpm test && corepack pnpm lint` — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/server src/engines/relayEngine.ts src/engines/__tests__ && git commit -m "feat(relay): accept and send lang on direct requests"`
+- [x] **Step 1: Write the failing tests** — Run: `corepack pnpm vitest run src/server/__tests__/relay.test.ts src/engines/__tests__/relayEngine.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: `corepack pnpm test && corepack pnpm lint` — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/server src/engines/relayEngine.ts src/engines/__tests__ && git commit -m "feat(relay): accept and send lang on direct requests"`
 
 ### Task 5: Docs and version 0.5.0
 

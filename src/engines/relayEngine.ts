@@ -186,8 +186,9 @@ const CATALOGS: Record<string, { voices: readonly VoiceInfo[]; map: VoiceMap }> 
 };
 
 /**
- * A keyed engine as a relay client: `POST { engine, text, voice }`. Not `keyed` (it holds no key,
- * so the cascade never skips it for one); slot limits are the relay's, so it sets no `maxConcurrent`.
+ * A keyed engine as a relay client: `POST { engine, text, voice, lang? }`, `lang` only when the
+ * request has one. Not `keyed` (it holds no key, so the cascade never skips it for one); slot
+ * limits are the relay's, so it sets no `maxConcurrent`.
  */
 export function createRelayEngine(id: string, options: RelayEngineOptions): Engine {
   const catalog = Object.hasOwn(CATALOGS, id) ? CATALOGS[id] : undefined;
@@ -197,8 +198,9 @@ export function createRelayEngine(id: string, options: RelayEngineOptions): Engi
     id,
     voices: catalog.voices,
     defaults: { voices: catalog.map },
-    async synthesize(text, voice, signal, hooks) {
-      return (await relayFetch(fetchOpts, { engine: id, text, voice }, signal, hooks)).bytes;
+    async synthesize(text, voice, signal, hooks, lang) {
+      const body = { engine: id, text, voice, ...(lang !== undefined ? { lang } : {}) };
+      return (await relayFetch(fetchOpts, body, signal, hooks)).bytes;
     },
   };
 }
