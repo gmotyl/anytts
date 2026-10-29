@@ -154,6 +154,26 @@ describe("createTts", () => {
     expect(tts.isCached({ engine: "other", text: "hello" })).toBe(true);
   });
 
+  it("uses the language captured at resolution when the request is mutated while queued", async () => {
+    // concurrency 1: "busy" holds the only slot, so the "pl" request waits in the queue.
+    const { tts, other } = setup({ concurrency: 1 });
+    const busy = tts.synthesize({ engine: "other", text: "busy" });
+    const req: { engine: string; text: string; lang: string } = { engine: "other", text: "hello", lang: "pl" };
+    const queued = tts.synthesize(req);
+    await flush();
+    expect(other.calls).toHaveLength(1);
+    req.lang = "en";
+    other.calls[0]!.resolve(bytes(1));
+    await busy;
+    await flush();
+    expect(other.calls).toHaveLength(2);
+    expect(other.calls[1]!.lang).toBe("pl");
+    other.calls[1]!.resolve(bytes(2));
+    await queued;
+    expect(tts.isCached({ engine: "other", text: "hello", lang: "pl" })).toBe(true);
+    expect(tts.isCached({ engine: "other", text: "hello", lang: "en" })).toBe(false);
+  });
+
   it("duplicate requests call the engine once", async () => {
     const { tts, edge } = setup();
     const first = tts.synthesize({ text: "hello" });

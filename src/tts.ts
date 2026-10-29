@@ -335,14 +335,16 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
   const resolveEngine = (engineId: string, req: SynthesisRequest, voiceOverride?: string, pronounceOverride?: boolean): Resolved => {
     const entry = engines.get(engineId);
     if (!entry) throw new UnknownEngineError(engineId);
+    // Snapshot the language once: the deferred call (and its retries) must not see a later mutation of `req`.
+    const lang = req.lang;
     const voices = entry.config.voices ?? {};
-    const voice = voiceOverride ?? (req.lang !== undefined && Object.hasOwn(voices, req.lang) ? voices[req.lang] : undefined) ?? voices.default;
-    if (voice === undefined) throw new TtsError("unknown-voice", `${engineId} has no voice for ${req.lang ?? "default"}`);
+    const voice = voiceOverride ?? (lang !== undefined && Object.hasOwn(voices, lang) ? voices[lang] : undefined) ?? voices.default;
+    if (voice === undefined) throw new TtsError("unknown-voice", `${engineId} has no voice for ${lang ?? "default"}`);
     if (!entry.engine.voices.some((v) => v.id === voice)) {
       throw new TtsError("unknown-voice", `voice ${voice} is not in the ${engineId} catalog`);
     }
     const text = prepareText(engineId, req, pronounceOverride);
-    const key = memberKey(engineId, voice, req.lang, text);
+    const key = memberKey(engineId, voice, lang, text);
     return {
       engineId,
       retries: entry.config.retries ?? DEFAULT_RETRIES,
@@ -350,7 +352,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
       text,
       key,
       call: async (signal, hooks) => ({
-        bytes: await entry.engine.synthesize(text, voice, signal, hooks, req.lang),
+        bytes: await entry.engine.synthesize(text, voice, signal, hooks, lang),
         mime: "audio/mpeg",
         engine: engineId,
         voice,
@@ -368,6 +370,8 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
   const resolveRelayCascade = (req: SynthesisRequest): Resolved => {
     // One voice id cannot name voices of several engines.
     if (req.voice !== undefined) throw new TtsError("unknown-voice", "a cascade request takes `voices` per member, not `voice`");
+    // `store` runs after the relay answers: rebuild the member key from the request as it was resolved.
+    const snapshot: SynthesisRequest = { ...req };
     const key = JSON.stringify([CASCADE, req.lang ?? null, cascadeOptionsHash(req), req.text]);
     const body = {
       text: req.text,
@@ -386,8 +390,9 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
       key,
       call: async (signal, hooks) => ({ ...(await relayCascade!.synthesize(body, signal, hooks)), mime: "audio/mpeg" }),
       store: (result) => {
-        const pronounce = req.pronunciation && Object.hasOwn(req.pronunciation, result.engine) ? req.pronunciation[result.engine] : undefined;
-        const member = memberKey(result.engine, result.voice, req.lang, prepareText(result.engine, req, pronounce));
+        const { pronunciation } = snapshot;
+        const pronounce = pronunciation && Object.hasOwn(pronunciation, result.engine) ? pronunciation[result.engine] : undefined;
+        const member = memberKey(result.engine, result.voice, snapshot.lang, prepareText(result.engine, snapshot, pronounce));
         // The rebuilt key guesses the relay's prepared text (its pronunciation config may differ), so
         // another answer may already sit there: never overwrite it, keep this one under the alias key.
         if (cache.has(member)) {
