@@ -9,6 +9,7 @@ const voice = (id: string): VoiceInfo => ({ id, label: id, locale: "pl-PL", gend
 interface Call {
   text: string;
   voice: string;
+  lang: string | undefined;
   hooks: EngineHooks | undefined;
   resolve: (bytes: ArrayBuffer) => void;
   reject: (error: unknown) => void;
@@ -27,9 +28,9 @@ function fakeEngine(id: string, keyed: boolean) {
     id,
     keyed,
     voices: [voice(`${id}-pl`), voice(`${id}-en`), voice(`${id}-alt`)],
-    synthesize(text, v, signal, hooks) {
+    synthesize(text, v, signal, hooks, lang) {
       return new Promise<ArrayBuffer>((resolve, reject) => {
-        const call: Call = { text, voice: v, hooks, resolve, reject };
+        const call: Call = { text, voice: v, lang, hooks, resolve, reject };
         calls.push(call);
         signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
         if (behaviour === "answer") resolve(new Uint8Array([1]).buffer);
@@ -91,6 +92,15 @@ describe("cascade", () => {
     expect(fake(fakes, "a").calls.map((c) => c.voice)).toEqual(["a-pl"]);
     expect(fake(fakes, "b").calls).toHaveLength(0);
     expect(fake(fakes, "edge").calls).toHaveLength(0);
+  });
+
+  it("passes req.lang to each cascade member's synthesize", async () => {
+    const { tts, fakes } = setup();
+    fake(fakes, "a").set((call) => call.reject(new TtsError("rejected")));
+    const result = await tts.synthesize({ text: "cześć", lang: "pl" });
+    expect(result.engine).toBe("b");
+    expect(fake(fakes, "a").calls.map((c) => c.lang)).toEqual(["pl"]);
+    expect(fake(fakes, "b").calls.map((c) => c.lang)).toEqual(["pl"]);
   });
 
   it("a member without a key is skipped", async () => {

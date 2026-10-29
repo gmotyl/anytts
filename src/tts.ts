@@ -323,8 +323,10 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     return pronounce && req.lang !== undefined ? applyPronunciation(req.text, req.lang, config.pronunciation) : req.text;
   };
 
-  // Built on the prepared text, so the same request text with and without a map never collides.
-  const memberKey = (engineId: string, voice: string, text: string): string => JSON.stringify([engineId, voice, text]);
+  // Built on the prepared text, so the same request text with and without a map never collides;
+  // `lang` is part of it because an engine may speak the same text differently per language.
+  const memberKey = (engineId: string, voice: string, lang: string | undefined, text: string): string =>
+    JSON.stringify([engineId, voice, lang ?? null, text]);
 
   /**
    * Throws RangeError for an unconfigured engine and `unknown-voice` for a voice outside its catalog.
@@ -340,7 +342,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
       throw new TtsError("unknown-voice", `voice ${voice} is not in the ${engineId} catalog`);
     }
     const text = prepareText(engineId, req, pronounceOverride);
-    const key = memberKey(engineId, voice, text);
+    const key = memberKey(engineId, voice, req.lang, text);
     return {
       engineId,
       retries: entry.config.retries ?? DEFAULT_RETRIES,
@@ -348,7 +350,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
       text,
       key,
       call: async (signal, hooks) => ({
-        bytes: await entry.engine.synthesize(text, voice, signal, hooks),
+        bytes: await entry.engine.synthesize(text, voice, signal, hooks, req.lang),
         mime: "audio/mpeg",
         engine: engineId,
         voice,
@@ -385,7 +387,7 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
       call: async (signal, hooks) => ({ ...(await relayCascade!.synthesize(body, signal, hooks)), mime: "audio/mpeg" }),
       store: (result) => {
         const pronounce = req.pronunciation && Object.hasOwn(req.pronunciation, result.engine) ? req.pronunciation[result.engine] : undefined;
-        const member = memberKey(result.engine, result.voice, prepareText(result.engine, req, pronounce));
+        const member = memberKey(result.engine, result.voice, req.lang, prepareText(result.engine, req, pronounce));
         // The rebuilt key guesses the relay's prepared text (its pronunciation config may differ), so
         // another answer may already sit there: never overwrite it, keep this one under the alias key.
         if (cache.has(member)) {

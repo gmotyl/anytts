@@ -200,7 +200,7 @@ describe("relay serves every engine", () => {
       expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([7, 7]));
     }
     expect(elevenlabs.synthesize).toHaveBeenCalledTimes(2);
-    expect(elevenlabs.synthesize).toHaveBeenCalledWith("Cześć", "elevenlabs-pl", expect.any(AbortSignal), expect.anything());
+    expect(elevenlabs.synthesize).toHaveBeenCalledWith("Cześć", "elevenlabs-pl", expect.any(AbortSignal), expect.anything(), undefined);
     expect(synthesize).not.toHaveBeenCalled();
   });
 

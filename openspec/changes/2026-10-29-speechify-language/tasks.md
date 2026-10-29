@@ -43,9 +43,9 @@ JSON.stringify([engineId, voice, lang ?? null, preparedText])
 - "tts > the same text with different lang does not share a cache entry"
 - "cascade > passes req.lang to each cascade member's synthesize"
 
-- [ ] **Step 1: Write the failing tests** — Run: `corepack pnpm vitest run src/__tests__/tts.test.ts src/__tests__/cascade.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: `corepack pnpm test && corepack pnpm lint` — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/engine.ts src/tts.ts src/__tests__ && git commit -m "feat(tts): pass the request language to engines and key the cache on it"`
+- [x] **Step 1: Write the failing tests** — Run: `corepack pnpm vitest run src/__tests__/tts.test.ts src/__tests__/cascade.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: `corepack pnpm test && corepack pnpm lint` — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/engine.ts src/tts.ts src/__tests__ && git commit -m "feat(tts): pass the request language to engines and key the cache on it"`
 
 ### Task 2: Speechify sends `language` across languages
 
