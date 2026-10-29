@@ -6,8 +6,8 @@ engines reach it.
 ### Requirement: The Relay handler synthesizes on the server with an Edge identity
 `createRelayHandler(options)` returns a Fetch-standard `(Request) => Promise<Response>`. Without
 `tts` it runs the Edge engine in Node and answers `POST { text, voice }`; with `tts` in its options it
-serves every engine of that configuration — `POST { engine?, text, voice }` for one engine
-(`engine` defaults to `edge`) and `POST { engine: "cascade", text, lang?, voices?, order?,
+serves every engine of that configuration — `POST { engine?, text, voice, lang? }` for one engine
+(`engine` defaults to `edge`; `lang`, a string when present, is the Request language) and `POST { engine: "cascade", text, lang?, voices?, order?,
 pronunciation? }` for the chain — and every `200` names the engine and voice that spoke. `tts` is
 a `TtsConfig` or a shared `Tts` instance. `authorize` stays optional for every configuration.
 
@@ -61,6 +61,15 @@ a `TtsConfig` or a shared `Tts` instance. `authorize` stays optional for every c
 - **THEN** the response is `502` with JSON `{ "kind": <that kind> }`, plus `retryAfter` and a
   `Retry-After` header when the kind is `rate-limited`
 
+#### Scenario: A direct request carries its language
+- **GIVEN** a relay created with `tts` configuring `speechify`
+- **WHEN** `POST { engine: "speechify", text, voice: "geffen_32", lang: "pl" }` arrives
+- **THEN** Speechify synthesizes with Request language `"pl"` (its body carries `language: "pl-PL"`)
+
+#### Scenario: A non-string language is refused
+- **WHEN** `POST { engine: "speechify", text, voice, lang: 1 }` arrives
+- **THEN** the response is `400` and no synthesis starts
+
 ## ADDED Requirements
 
 ### Requirement: The Relay handler mounts in Node HTTP servers
@@ -108,13 +117,19 @@ The `edge` engine accepts `relayUrl` and `mode: "auto" | "direct" | "relay"`; th
 
 ### Requirement: Keyed engines and the cascade are relay clients in the browser
 In the browser, `cascade` and every keyed engine take only `{ relayUrl, firstByteMs? }`, POST the
-request to the relay and report the engine and voice from the response headers.
+request to the relay and report the engine and voice from the response headers. A direct keyed-engine request sends
+`lang` when the request has one.
 
 #### Scenario: A browser cascade request
 - **WHEN** a browser instance with `engines: { cascade: { relayUrl: "/api/tts" } }` synthesizes
   `{ engine: "cascade", text, lang: "pl", voices }`
 - **THEN** `/api/tts` receives `{ engine: "cascade", text, lang, voices }` and the result's `engine`
   and `voice` equal the response's `x-anytts-engine` / `x-anytts-voice`
+
+#### Scenario: A browser direct keyed request sends its language
+- **WHEN** a browser instance with `engines: { speechify: { relayUrl: "/api/tts" } }` synthesizes
+  `{ engine: "speechify", text, voice: "geffen_32", lang: "pl" }`
+- **THEN** `/api/tts` receives `{ engine: "speechify", text, voice: "geffen_32", lang: "pl" }`
 
 #### Scenario: Relay errors keep kind and wait
 - **WHEN** the relay answers `502 { "kind": "rate-limited", "retryAfter": 30 }`
