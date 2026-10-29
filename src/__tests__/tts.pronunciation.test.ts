@@ -83,7 +83,7 @@ describe("per-engine pronunciation", () => {
     expect(on).toHaveLength(1);
     expect(off).toHaveLength(1);
     expect(on[0]).not.toBe(off[0]);
-    expect(on[0]).toBe(JSON.stringify(["edge", "pl-PL-MarekNeural", applyPronunciation(TEXT, "pl")]));
-    expect(off[0]).toBe(JSON.stringify(["edge", "pl-PL-MarekNeural", TEXT]));
+    expect(on[0]).toBe(JSON.stringify(["edge", "pl-PL-MarekNeural", "pl", applyPronunciation(TEXT, "pl")]));
+    expect(off[0]).toBe(JSON.stringify(["edge", "pl-PL-MarekNeural", "pl", TEXT]));
   });
 });

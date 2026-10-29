@@ -10,6 +10,7 @@ const VOICES = [voice("pl-PL-MarekNeural"), voice("en-US-AndrewMultilingualNeura
 interface Call {
   text: string;
   voice: string;
+  lang: string | undefined;
   signal: AbortSignal;
   /** Reports the first audio chunk through the hooks the engine was given. */
   firstByte: () => void;
@@ -23,9 +24,9 @@ function fakeEngine(id = "edge") {
   const engine: Engine = {
     id,
     voices: VOICES,
-    synthesize(text, voiceId, signal, hooks?: EngineHooks) {
+    synthesize(text, voiceId, signal, hooks?: EngineHooks, lang?: string) {
       return new Promise<ArrayBuffer>((resolve, reject) => {
-        calls.push({ text, voice: voiceId, signal, firstByte: () => hooks?.onFirstByte?.(), resolve, reject });
+        calls.push({ text, voice: voiceId, lang, signal, firstByte: () => hooks?.onFirstByte?.(), resolve, reject });
         signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
       });
     },
@@ -110,6 +111,67 @@ describe("createTts", () => {
     await flush();
     other.calls[0]!.resolve(bytes(2));
     expect(await explicit).toMatchObject({ engine: "other", voice: "en-GB-RyanNeural" });
+  });
+
+  it("passes req.lang to engine.synthesize on the direct path", async () => {
+    const { tts, edge } = setup();
+    const result = tts.synthesize({ engine: "edge", text: "a", lang: "pl" });
+    await flush();
+    expect(edge.calls.map((c) => c.lang)).toEqual(["pl"]);
+    edge.calls[0]!.resolve(bytes(1));
+    await result;
+  });
+
+  it("passes undefined lang when the request has none", async () => {
+    const { tts, edge } = setup();
+    const result = tts.synthesize({ text: "a" });
+    await flush();
+    expect(edge.calls).toHaveLength(1);
+    expect(edge.calls[0]!.lang).toBeUndefined();
+    edge.calls[0]!.resolve(bytes(1));
+    await result;
+  });
+
+  it("the same text with different lang does not share a cache entry", async () => {
+    // `other` has no pronunciation and no `pl` voice: same text, same voice, only `lang` differs.
+    const { tts, other } = setup();
+    const withLang = tts.synthesize({ engine: "other", text: "hello", lang: "pl" });
+    await flush();
+    other.calls[0]!.resolve(bytes(1));
+    await withLang;
+    expect(tts.isCached({ engine: "other", text: "hello", lang: "pl" })).toBe(true);
+    expect(tts.isCached({ engine: "other", text: "hello" })).toBe(false);
+
+    const without = tts.synthesize({ engine: "other", text: "hello" });
+    await flush();
+    expect(other.calls.map((c) => [c.voice, c.lang])).toEqual([
+      ["en-GB-RyanNeural", "pl"],
+      ["en-GB-RyanNeural", undefined],
+    ]);
+    other.calls[1]!.resolve(bytes(2));
+    await without;
+    expect(tts.isCached({ engine: "other", text: "hello", lang: "pl" })).toBe(true);
+    expect(tts.isCached({ engine: "other", text: "hello" })).toBe(true);
+  });
+
+  it("uses the language captured at resolution when the request is mutated while queued", async () => {
+    // concurrency 1: "busy" holds the only slot, so the "pl" request waits in the queue.
+    const { tts, other } = setup({ concurrency: 1 });
+    const busy = tts.synthesize({ engine: "other", text: "busy" });
+    const req: { engine: string; text: string; lang: string } = { engine: "other", text: "hello", lang: "pl" };
+    const queued = tts.synthesize(req);
+    await flush();
+    expect(other.calls).toHaveLength(1);
+    req.lang = "en";
+    other.calls[0]!.resolve(bytes(1));
+    await busy;
+    await flush();
+    expect(other.calls).toHaveLength(2);
+    expect(other.calls[1]!.lang).toBe("pl");
+    other.calls[1]!.resolve(bytes(2));
+    await queued;
+    expect(tts.isCached({ engine: "other", text: "hello", lang: "pl" })).toBe(true);
+    expect(tts.isCached({ engine: "other", text: "hello", lang: "en" })).toBe(false);
   });
 
   it("duplicate requests call the engine once", async () => {
@@ -371,7 +433,7 @@ describe("createTts", () => {
 
   describe("in-flight state", () => {
     const key = (text: string, engine = "edge", voice = "en-US-AndrewMultilingualNeural") =>
-      JSON.stringify([engine, voice, text]);
+      JSON.stringify([engine, voice, null, text]);
     const record = (tts: ReturnType<typeof setup>["tts"]) => {
       const events: TtsEvent[] = [];
       const unsubscribe = tts.subscribe((e) => events.push(e));

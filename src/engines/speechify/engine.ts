@@ -1,5 +1,6 @@
 import type { EngineHooks } from "../../engine.js";
 import { keyedFetch, missingKeyError, type KeyedEngine, type KeyedEngineOptions, type Refusal, type RefusalRules } from "../keyed.js";
+import { speechifyLanguage } from "./languages.js";
 import { SPEECHIFY_VOICE_MAP, SPEECHIFY_VOICES } from "./voices.js";
 
 // API reference: https://docs.speechify.ai/build/api-reference/v1/audio/stream (POST /v1/audio/stream,
@@ -22,15 +23,26 @@ const RULES: RefusalRules = {
 export function createSpeechifyEngine(options: SpeechifyEngineOptions = {}): KeyedEngine {
   const { apiKey, model = "simba-3.5", baseUrl = "https://api.speechify.ai" } = options;
 
-  async function synthesize(text: string, voice: string, signal: AbortSignal, hooks?: EngineHooks): Promise<ArrayBuffer> {
+  async function synthesize(
+    text: string,
+    voice: string,
+    signal: AbortSignal,
+    hooks?: EngineHooks,
+    lang?: string,
+  ): Promise<ArrayBuffer> {
     if (!apiKey) throw missingKeyError("speechify");
+    // `language` is sent only when the request language is in the simba-3.5 table and its base
+    // differs from the voice's catalog locale; otherwise it is omitted and the voice's own locale
+    // decides. A voice outside the catalog has no known locale, so a known `lang` is always sent.
+    const voiceLocale = SPEECHIFY_VOICES.find((v) => v.id === voice)?.locale ?? "";
+    const language = speechifyLanguage(lang, voiceLocale);
     return keyedFetch(
       "speechify",
       {
         url: `${baseUrl}/v1/audio/stream`,
-        // `Accept` selects the MP3 container; `language` is omitted so the voice's own locale decides.
+        // `Accept` selects the MP3 container.
         headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", accept: "audio/mpeg" },
-        body: JSON.stringify({ input: text, voice_id: voice, model }),
+        body: JSON.stringify({ input: text, voice_id: voice, model, ...(language ? { language } : {}) }),
       },
       options,
       RULES,

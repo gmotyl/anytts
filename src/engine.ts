@@ -37,5 +37,6 @@ export interface Engine {
   defaults?: EngineDefaults;
   /** Needs an `apiKey` in its config: the cascade skips it, without a request, when none is set. */
   keyed?: boolean;
-  synthesize(text: string, voice: string, signal: AbortSignal, hooks?: EngineHooks): Promise<ArrayBuffer>;
+  /** `lang` is the request language, when the request has one; an engine may ignore it. */
+  synthesize(text: string, voice: string, signal: AbortSignal, hooks?: EngineHooks, lang?: string): Promise<ArrayBuffer>;
 }

@@ -66,7 +66,7 @@ describe("browser relay clients", () => {
     expect(result.voice).toBe("pl-PL-MarekNeural");
     expect(result.mime).toBe("audio/mpeg");
     expect(new Uint8Array(result.bytes)).toEqual(AUDIO);
-    // A keyed engine in the browser is a relay client too: `{ engine, text, voice }`.
+    // A keyed engine in the browser is a relay client too: `{ engine, text, voice, lang? }`.
     const keyed = createTts({ engines: { elevenlabs: { relayUrl: RELAY } }, defaultEngine: "elevenlabs", scheduler });
     fetchMock.mockImplementationOnce(async () => audio("elevenlabs", ELEVENLABS_VOICE_MAP.pl!));
     const spoken = await keyed.synthesize({ text: "Cześć", lang: "pl" });
@@ -74,6 +74,7 @@ describe("browser relay clients", () => {
       engine: "elevenlabs",
       text: "Cześć",
       voice: ELEVENLABS_VOICE_MAP.pl,
+      lang: "pl",
     });
     expect(spoken).toMatchObject({ engine: "elevenlabs", voice: ELEVENLABS_VOICE_MAP.pl });
   });
@@ -189,11 +190,35 @@ describe("browser relay clients", () => {
       engine: "elevenlabs",
       text: "Cześć",
       voice: ELEVENLABS_VOICE_MAP.pl,
+      lang: "pl",
     });
     expect(createRelayEngine("elevenlabs", { relayUrl: RELAY }).keyed).toBeUndefined();
     // Holding no key, it is not `no-key`.
     expect(tts.engineStatus("elevenlabs").state).toBe("ready");
     // Without a relayUrl a keyed engine cannot run in the browser.
     expect(() => createTts({ engines: { elevenlabs: {} }, defaultEngine: "elevenlabs", scheduler })).toThrow(RangeError);
+  });
+});
+
+describe("relay client", () => {
+  it("sends lang on a direct keyed request when the request has one", async () => {
+    const fetchMock = stubRelay((body) => audio(String(body.engine), String(body.voice)));
+    const engine = createRelayEngine("speechify", { relayUrl: RELAY });
+    await engine.synthesize("Cześć", "geffen_32", new AbortController().signal, undefined, "pl");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]?.body))).toEqual({
+      engine: "speechify",
+      text: "Cześć",
+      voice: "geffen_32",
+      lang: "pl",
+    });
+  });
+
+  it("omits lang when the request has none", async () => {
+    const fetchMock = stubRelay((body) => audio(String(body.engine), String(body.voice)));
+    const engine = createRelayEngine("speechify", { relayUrl: RELAY });
+    await engine.synthesize("Hi", "geffen_32", new AbortController().signal);
+    const body = JSON.parse(String(fetchMock.mock.calls[0]![1]?.body)) as Record<string, unknown>;
+    expect(body).toEqual({ engine: "speechify", text: "Hi", voice: "geffen_32" });
+    expect(body).not.toHaveProperty("lang");
   });
 });

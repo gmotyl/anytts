@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { TtsError } from "../../../errors.js";
+import { listVoices } from "../../registry.js";
 import { createSpeechifyEngine } from "../engine.js";
 import { SPEECHIFY_VOICE_MAP, SPEECHIFY_VOICES } from "../voices.js";
 
@@ -122,5 +123,72 @@ describe("createSpeechifyEngine", () => {
       expect(SPEECHIFY_VOICES.some((voice) => voice.id === id)).toBe(true);
     }
     expect(SPEECHIFY_VOICES.find((voice) => voice.id === SPEECHIFY_VOICE_MAP.pl)?.locale).toBe("pl-PL");
+  });
+});
+
+describe("speechify", () => {
+  /** The JSON body Speechify receives when `voice` synthesizes with `lang`. */
+  async function body(voice: string, lang?: string): Promise<Record<string, unknown>> {
+    const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => audio([1]));
+    const engine = createSpeechifyEngine({ apiKey: "k", fetch });
+    await engine.synthesize("Dzień dobry.", voice, new AbortController().signal, undefined, lang);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    return JSON.parse(String(fetch.mock.calls[0]![1]?.body)) as Record<string, unknown>;
+  }
+
+  it("sends language pl-PL for a pl request on an en-US voice", async () => {
+    expect(await body("geffen_32", "pl")).toEqual({
+      input: "Dzień dobry.",
+      voice_id: "geffen_32",
+      model: "simba-3.5",
+      language: "pl-PL",
+    });
+  });
+
+  it("sends a region-qualified lang from the table unchanged", async () => {
+    expect((await body("geffen_32", "pl-PL")).language).toBe("pl-PL");
+  });
+
+  it("maps en to en-GB", async () => {
+    expect((await body("kajetan", "en")).language).toBe("en-GB");
+  });
+
+  it("omits language when the voice already speaks the request language", async () => {
+    expect(await body("kajetan", "pl")).not.toHaveProperty("language");
+    expect(await body("hugh_32", "en")).not.toHaveProperty("language");
+  });
+
+  it("omits language when the request has no lang", async () => {
+    expect(await body("geffen_32")).not.toHaveProperty("language");
+  });
+
+  it("omits language for a lang outside the simba-3.5 table", async () => {
+    expect(await body("geffen_32", "xx")).not.toHaveProperty("language");
+  });
+
+  it("sends language for a voice missing from the catalog", async () => {
+    expect((await body("my_clone", "pl")).language).toBe("pl-PL");
+  });
+});
+
+describe("voices", () => {
+  it("speechify catalog lists all six native pl-PL voices", () => {
+    const polish = listVoices("speechify").filter((voice) => voice.locale === "pl-PL");
+    expect(polish.map((voice) => voice.id).sort()).toEqual(["dominika", "iga", "jagna", "kajetan", "michal", "tymon"]);
+    expect(polish.find((voice) => voice.id === "dominika")).toEqual({
+      id: "dominika",
+      label: "Dominika (multilingual · PL)",
+      locale: "pl-PL",
+      gender: "female",
+      multilingual: true,
+    });
+    expect(polish.find((voice) => voice.id === "michal")).toEqual({
+      id: "michal",
+      label: "Michał (multilingual · PL)",
+      locale: "pl-PL",
+      gender: "male",
+      multilingual: true,
+    });
+    expect(SPEECHIFY_VOICE_MAP.pl).toBe("kajetan");
   });
 });

@@ -90,7 +90,9 @@ document.addEventListener("visibilitychange", () => {
 Built-in engines receive an `EngineHooks` object (exported as a type) with each call and report
 the first audio chunk through `hooks.onFirstByte()`; the Edge engine does so direct or through
 the relay. That signal drives the request's `onFirstByte` and tells `restartStalled` an attempt
-is streaming: until it fires, the attempt counts as silent and can be restarted.
+is streaming: until it fires, the attempt counts as silent and can be restarted. An engine is
+called as `synthesize(text, voice, signal, hooks?, lang?)`: `lang` is the request's language when
+it has one, and an engine may ignore it (Speechify uses it, see [Keyed engines](#keyed-engines)).
 
 ### Observing a request
 
@@ -233,6 +235,18 @@ Every keyed engine also takes `apiKey`, `firstByteMs` (wait for the response hea
 `edge` is unlimited unless you set it). `listVoices(id)` returns each provider's stock catalog.
 Azure's `region` is checked at creation: an `apiKey` without a valid region throws `RangeError`.
 Only the public Azure cloud is supported.
+
+On `simba-3.5` every Speechify voice speaks all 48 of its languages in its own accent. The stock
+catalog lists the native Polish voices (`kajetan`, `iga`, `tymon`, `jagna`, `dominika`, `michal`)
+plus English staff picks. Speechify gets a `language` field only when the request's `lang`
+resolves through the simba-3.5 table and differs from the voice's own language: a bare code maps
+to one locale (`pl → pl-PL`, and the European variant where there are several: `en → en-GB`,
+`pt → pt-PT`, `es → es-ES`), or to the bare code itself where the docs give no locale (`be`,
+`bs`, `my`, `la`, `no`, `sr`, `tl`), and a region-qualified `lang` must be one of the table's
+locales as written. So `geffen_32` (en-US) with `lang: "pl"` sends `pl-PL` and speaks Polish, while
+`kajetan` with `lang: "pl"` or `geffen_32` with `lang: "en"` sends nothing and the voice's own
+locale decides. A voice outside the catalog (a cloned one) has no known language, so it gets
+`language` whenever the `lang` resolves. A `lang` outside the table is never sent.
 
 A keyed engine without `apiKey` can still be configured: asked directly, it rejects
 `TtsError("unauthorized")` and sends nothing; as a cascade member it is skipped. So a consumer can
@@ -412,9 +426,11 @@ exhausted free tier answers with a quota error the cascade skips instead of a bi
 **Request bodies** (`POST`, JSON):
 
 - `{ text, voice }` — the standalone Edge engine, as before 0.4.0.
-- `{ engine, text, voice }` — one engine of `tts`. `engine: "edge"` goes through the `tts`
-  instance (its cache and scheduler) when it configures `edge`, else through the standalone Edge
-  engine.
+- `{ engine, text, voice, lang? }` — one engine of `tts`, which receives `lang` as the request
+  language (a non-string `lang` is a `400` when `tts` serves the request). `engine: "edge"` goes
+  through the `tts` instance (its cache and scheduler) when it configures `edge`, else through the
+  standalone Edge engine, which ignores `lang` like the body without `engine` and does not
+  validate it.
 - `{ engine: "cascade", text, lang?, voices?, order?, pronunciation? }` — the chain of `tts`.
 
 **Responses:**
@@ -458,6 +474,11 @@ const tts = createTts({
 
 const { engine, voice } = await tts.synthesize({ text: "Cześć!", lang: "pl" }); // from the response headers
 ```
+
+A keyed relay client sends the request's `lang` on a direct request. The browser applies that
+engine's pronunciation (when its `pronunciation` flag is on) before sending, and the server now
+sees the `lang` too, so an engine with `pronunciation` enabled on both sides is respelled twice:
+enable it on one side only.
 
 Relay errors keep their `kind` and `retryAfter` in the browser. A keyed relay client follows the
 normal retry rules, and the relay's refusals open its skip windows as a direct engine's would
