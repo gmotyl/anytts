@@ -141,7 +141,7 @@ locale comes from `SPEECHIFY_VOICES`.
 
 **Verification: non-testable** — Run: `corepack pnpm test && corepack pnpm lint && corepack pnpm build` — Expected: all green; `grep -n "lang?" README.md` shows the direct relay body; `package.json` version `0.5.0`.
 
-- [ ] **Step 1: Update docs and version** — Run: the verification above — Expected: PASS
-- [ ] **Step 2: Commit** — `git add README.md package.json openspec && git commit -m "docs: speechify language, relay lang; 0.5.0"`
+- [x] **Step 1: Update docs and version** — Run: the verification above — Expected: PASS
+- [x] **Step 2: Commit** — `git add README.md package.json openspec && git commit -m "docs: speechify language, relay lang; 0.5.0"`
 
 Live check (Greg, with keys, after build): `geffen_32` + `lang: "pl"` through pavilio's cascade speaks Polish.
