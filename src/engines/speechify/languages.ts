@@ -1,8 +1,9 @@
 // simba-3.5 languages: https://docs.speechify.ai/docs/language-support.md, section "Simba 3.5
 // languages" (48 base codes, fetched 2026-10-29). Each base maps to the locale of its "Staff picks for
 // every language" row; where a base has several rows the European one wins (en-GB, pt-PT, es-ES).
-// Bases without a row of their own code (be, bs, my, la, no, sr, tl) send the bare code, which the
-// docs accept ("either alone or with any region").
+// be, bs, my, la and sr have no staff-pick row; no and tl have rows only under other base subtags
+// (Norwegian nb-NO, Filipino fil-PH), so they too send the bare code to keep base(locale) === key.
+// The docs accept a bare code ("either alone or with any region").
 
 /** Base code → simba-3.5 locale, from the docs' "Simba 3.5 languages" section (48 entries);
  *  European variant where a base has several: en → en-GB, pt → pt-PT, es → es-ES. */

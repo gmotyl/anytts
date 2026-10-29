@@ -165,6 +165,10 @@ describe("speechify", () => {
   it("omits language for a lang outside the simba-3.5 table", async () => {
     expect(await body("geffen_32", "xx")).not.toHaveProperty("language");
   });
+
+  it("sends language for a voice missing from the catalog", async () => {
+    expect((await body("my_clone", "pl")).language).toBe("pl-PL");
+  });
 });
 
 describe("voices", () => {
