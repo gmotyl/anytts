@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { TtsError } from "../../../errors.js";
+import { listVoices } from "../../registry.js";
 import { createSpeechifyEngine } from "../engine.js";
 import { SPEECHIFY_VOICE_MAP, SPEECHIFY_VOICES } from "../voices.js";
 
@@ -163,5 +164,27 @@ describe("speechify", () => {
 
   it("omits language for a lang outside the simba-3.5 table", async () => {
     expect(await body("geffen_32", "xx")).not.toHaveProperty("language");
+  });
+});
+
+describe("voices", () => {
+  it("speechify catalog lists all six native pl-PL voices", () => {
+    const polish = listVoices("speechify").filter((voice) => voice.locale === "pl-PL");
+    expect(polish.map((voice) => voice.id).sort()).toEqual(["dominika", "iga", "jagna", "kajetan", "michal", "tymon"]);
+    expect(polish.find((voice) => voice.id === "dominika")).toEqual({
+      id: "dominika",
+      label: "Dominika (multilingual · PL)",
+      locale: "pl-PL",
+      gender: "female",
+      multilingual: true,
+    });
+    expect(polish.find((voice) => voice.id === "michal")).toEqual({
+      id: "michal",
+      label: "Michał (multilingual · PL)",
+      locale: "pl-PL",
+      gender: "male",
+      multilingual: true,
+    });
+    expect(SPEECHIFY_VOICE_MAP.pl).toBe("kajetan");
   });
 });

@@ -102,9 +102,9 @@ locale comes from `SPEECHIFY_VOICES`.
 **Tests (names only — red first):**
 - "voices > speechify catalog lists all six native pl-PL voices"
 
-- [ ] **Step 1: Write the failing test** — Run: `corepack pnpm vitest run src/engines/speechify src/__tests__/voices.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: same — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/engines/speechify src/__tests__ && git commit -m "feat(speechify): add dominika and michal to the catalog"`
+- [x] **Step 1: Write the failing test** — Run: `corepack pnpm vitest run src/engines/speechify src/__tests__/voices.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: same — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/engines/speechify src/__tests__ && git commit -m "feat(speechify): add dominika and michal to the catalog"`
 
 ### Task 4: The direct relay request carries `lang`
 
