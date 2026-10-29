@@ -85,8 +85,6 @@ the message, as the cascade body already does.
 - Seven of the 48 simba-3.5 bases map to the bare code: `be`, `bs`, `my`, `la` and `sr` have no
   staff-pick locale, and `no` / `tl` appear only as `nb-NO` / `fil-PH` (other base subtags), so the
   bare code keeps `base(locale) === key`. The docs accept a bare code.
-- `voices.ts` takes the pl-PL list from the live `GET /v1/voices` (adding `dominika`, `michal`), not
-  from the language-support page's staff picks.
 
 ## Glossary
 
