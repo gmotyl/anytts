@@ -84,9 +84,9 @@ locale comes from `SPEECHIFY_VOICES`.
 - "speechify > omits language for a lang outside the simba-3.5 table"
 - "speechify languages > lists 48 bases with European defaults for en, pt and es"
 
-- [ ] **Step 1: Write the failing tests** — Run: `corepack pnpm vitest run src/engines/speechify` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: `corepack pnpm vitest run src/engines/speechify && corepack pnpm lint` — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/engines/speechify && git commit -m "feat(speechify): send language when the voice speaks another language"`
+- [x] **Step 1: Write the failing tests** — Run: `corepack pnpm vitest run src/engines/speechify` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: `corepack pnpm vitest run src/engines/speechify && corepack pnpm lint` — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/engines/speechify && git commit -m "feat(speechify): send language when the voice speaks another language"`
 
 ### Task 3: Speechify catalog lists all native Polish voices
 

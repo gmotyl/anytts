@@ -124,3 +124,44 @@ describe("createSpeechifyEngine", () => {
     expect(SPEECHIFY_VOICES.find((voice) => voice.id === SPEECHIFY_VOICE_MAP.pl)?.locale).toBe("pl-PL");
   });
 });
+
+describe("speechify", () => {
+  /** The JSON body Speechify receives when `voice` synthesizes with `lang`. */
+  async function body(voice: string, lang?: string): Promise<Record<string, unknown>> {
+    const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => audio([1]));
+    const engine = createSpeechifyEngine({ apiKey: "k", fetch });
+    await engine.synthesize("Dzień dobry.", voice, new AbortController().signal, undefined, lang);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    return JSON.parse(String(fetch.mock.calls[0]![1]?.body)) as Record<string, unknown>;
+  }
+
+  it("sends language pl-PL for a pl request on an en-US voice", async () => {
+    expect(await body("geffen_32", "pl")).toEqual({
+      input: "Dzień dobry.",
+      voice_id: "geffen_32",
+      model: "simba-3.5",
+      language: "pl-PL",
+    });
+  });
+
+  it("sends a region-qualified lang from the table unchanged", async () => {
+    expect((await body("geffen_32", "pl-PL")).language).toBe("pl-PL");
+  });
+
+  it("maps en to en-GB", async () => {
+    expect((await body("kajetan", "en")).language).toBe("en-GB");
+  });
+
+  it("omits language when the voice already speaks the request language", async () => {
+    expect(await body("kajetan", "pl")).not.toHaveProperty("language");
+    expect(await body("hugh_32", "en")).not.toHaveProperty("language");
+  });
+
+  it("omits language when the request has no lang", async () => {
+    expect(await body("geffen_32")).not.toHaveProperty("language");
+  });
+
+  it("omits language for a lang outside the simba-3.5 table", async () => {
+    expect(await body("geffen_32", "xx")).not.toHaveProperty("language");
+  });
+});
