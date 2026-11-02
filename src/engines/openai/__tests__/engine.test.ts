@@ -172,4 +172,34 @@ describe("createOpenAIEngine", () => {
     expect(settled).toBeInstanceOf(TtsError);
     expect((settled as TtsError).kind).toBe("first-byte-timeout");
   });
+  it("passes a custom stallMs through to the body read", async () => {
+    vi.useFakeTimers();
+    // Headers and one chunk arrive, then the body goes silent.
+    const silentAfterFirstChunk = (_url: string | URL | Request, init?: RequestInit) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1]));
+          init?.signal?.addEventListener("abort", () => controller.error(new DOMException("aborted", "AbortError")));
+        },
+      });
+      return Promise.resolve(new Response(body, { status: 200, headers: { "content-type": "audio/mpeg" } }));
+    };
+    const engine = createOpenAIEngine({ baseUrl: "http://h:8890", catalog: CATALOG, stallMs: 100, fetch: silentAfterFirstChunk });
+    let settled: unknown;
+    const pending = engine.synthesize("Hello", "en-female", signal()).catch((e: unknown) => (settled = e));
+    await vi.advanceTimersByTimeAsync(99);
+    expect(settled).toBeUndefined();
+    // Well before keyedFetch's 8000 default.
+    await vi.advanceTimersByTimeAsync(1);
+    await pending;
+    expect(settled).toBeInstanceOf(TtsError);
+    expect((settled as TtsError).kind).toBe("stalled");
+  });
+
+  it("throws RangeError when languageField names a fixed body field", () => {
+    for (const languageField of ["input", "voice", "model", "response_format"]) {
+      expect(() => engineWith(okFetch(), { languageField })).toThrow(RangeError);
+    }
+    expect(() => engineWith(okFetch(), { languageField: "language" })).not.toThrow();
+  });
 });

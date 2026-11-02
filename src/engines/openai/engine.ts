@@ -14,7 +14,7 @@ export interface OpenAIEngineOptions {
   apiKey?: string;
   /** Default "tts-1". */
   model?: string;
-  /** Body field that carries the request language (OmniVoice: "language"); unset → never sent. */
+  /** Body field that carries the request language (OmniVoice: "language"); unset → never sent. Cannot be input/voice/model/response_format. */
   languageField?: string;
   /** Merged into every request body; cannot override input/voice/model/response_format. */
   extraBody?: Record<string, unknown>;
@@ -31,6 +31,9 @@ const RULES: RefusalRules = {
   isQuota: () => false,
 };
 
+/** Body fields the engine always sets; `languageField` cannot name one of them. */
+const FIXED_FIELDS = new Set(["input", "voice", "model", "response_format"]);
+
 /** Language base: everything before the first `-`, lowercased. */
 const languageBase = (tag: string): string => tag.split("-")[0]!.toLowerCase();
 
@@ -45,6 +48,9 @@ function validate(options: OpenAIEngineOptions): void {
   }
   if (protocol !== "http:" && protocol !== "https:") {
     throw new RangeError(`openai: baseUrl must be http(s): ${baseUrl}`);
+  }
+  if (options.languageField !== undefined && FIXED_FIELDS.has(options.languageField)) {
+    throw new RangeError(`openai: languageField cannot be a fixed body field: ${options.languageField}`);
   }
   if (!Array.isArray(catalog) || catalog.length === 0) throw new RangeError("openai: catalog must be non-empty");
   const ids = new Set<string>();
