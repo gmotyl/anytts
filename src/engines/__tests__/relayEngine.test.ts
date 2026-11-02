@@ -230,14 +230,19 @@ describe("browser openai relay client", () => {
 
   it("browser openai requires a catalog", () => {
     const bare: TtsConfig = { engines: { openai: { relayUrl: "/api/tts" } }, defaultEngine: "openai", scheduler };
+    // The messages pin the openai client: an unregistered engine throws "unknown engine" instead.
     expect(() => createTts(bare)).toThrow(RangeError);
-    expect(() => createTts(openai({ catalog: [] }))).toThrow(RangeError);
+    expect(() => createTts(bare)).toThrow(/^openai: catalog must be non-empty$/);
+    expect(() => createTts(openai({ catalog: [] }))).toThrow(/^openai: catalog must be non-empty$/);
     expect(() => createTts(openai({ catalog: [PL_FEMALE, PL_FEMALE] }))).toThrow(RangeError);
+    expect(() => createTts(openai({ catalog: [PL_FEMALE, PL_FEMALE] }))).toThrow(/^openai: duplicate catalog voice id: pl-female$/);
   });
 
   it("browser openai refuses apiKey, baseUrl and extraBody", () => {
     for (const extra of [{ apiKey: "sk-secret" }, { baseUrl: "http://localhost:8880/v1" }, { extraBody: { speed: 1 } }]) {
+      const field = Object.keys(extra)[0]!;
       expect(() => createTts(openai(extra))).toThrow(RangeError);
+      expect(() => createTts(openai(extra))).toThrow(new RegExp(`^openai runs in the browser through the relay: ${field} stays on the server$`));
     }
   });
 
@@ -246,6 +251,21 @@ describe("browser openai relay client", () => {
     const tts = createTts(openai());
     const error = await rejection(tts.synthesize({ engine: "openai", text: "Hi", voice: "pl-female", lang: "pl" }));
     expect(error.kind).toBe("network");
+    // A kind that differs from the status fallback stands too: a 502 alone would fall back to `network`, a 429 alone to `rejected`.
+    for (const [status, kind] of [
+      [502, "unauthorized"],
+      [429, "rate-limited"],
+    ] as const) {
+      stubRelay(() => Response.json({ kind }, { status }));
+      const kept = await rejection(createTts(openai()).synthesize({ engine: "openai", text: "Hi", voice: "pl-female", lang: "pl" }));
+      expect(kept.kind).toBe(kind);
+      expect(kept.status).toBe(status);
+    }
+  });
+
+  it("browser openai voice map outside the catalog throws RangeError", () => {
+    expect(() => createTts(openai({ voices: { default: "nope" } }))).toThrow(RangeError);
+    expect(() => createTts(openai({ voices: { default: "nope" } }))).toThrow(/^openai voices\.default: nope is not in the catalog$/);
   });
 });
 
