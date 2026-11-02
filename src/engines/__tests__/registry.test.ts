@@ -39,7 +39,7 @@ const PAVILIO_VOICES = [
 describe("registry", () => {
   it("lists keyed engines and cascade with runtimes", () => {
     const engines = listEngines();
-    expect(engines.map((engine) => engine.id)).toEqual(["edge", "elevenlabs", "cartesia", "speechify", "azure", "cascade"]);
+    expect(engines.map((engine) => engine.id)).toEqual(["edge", "elevenlabs", "cartesia", "speechify", "azure", "openai", "cascade"]);
     const runtimes = Object.fromEntries(engines.map((engine) => [engine.id, [...engine.runtimes].sort()]));
     expect(runtimes).toEqual({
       edge: ["browser", "node"],
@@ -47,6 +47,7 @@ describe("registry", () => {
       cartesia: ["node"],
       speechify: ["node"],
       azure: ["node"],
+      openai: ["node"],
       cascade: ["browser", "node"],
     });
     for (const engine of engines) expect(engine.label).toBeTruthy();
@@ -115,6 +116,14 @@ describe("registry", () => {
     first!.id = "mutated";
     expect(listVoices("edge")[0]!.id).toBe(id);
     expect(createEdgeEngine().voices[0]!.id).toBe(id);
+  });
+
+  it("listEngines includes the openai engine for node", () => {
+    expect(listEngines()).toContainEqual({ id: "openai", label: "OpenAI-compatible (custom server)", runtimes: ["node"] });
+  });
+
+  it("listVoices returns no static voices for openai", () => {
+    expect(listVoices("openai")).toEqual([]);
   });
 
   it("unknown engine has no voices", () => {
