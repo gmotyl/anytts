@@ -81,9 +81,9 @@ export function createOpenAIEngine(options: OpenAIEngineOptions): Engine & {
 - "cascade moves past an unreachable openai server"
 - "openai runs one attempt at a time by default"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/server/__tests__/createTts.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src && git commit -m "feat(server): register the openai engine"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/server/__tests__/createTts.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
+- [x] **Step 3: Commit** — `git add src && git commit -m "feat(server): register the openai engine"`
 
 ### Task 3: Browser relay client for `openai`
 
