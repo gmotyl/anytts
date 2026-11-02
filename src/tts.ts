@@ -267,6 +267,11 @@ export function createTts(config: TtsConfig, internals: CreateTtsInternals = {})
     const engine = factory(options);
     const voices = engineConfig.voices ?? engine.defaults?.voices;
     const maxConcurrent = engineConfig.maxConcurrent ?? engine.defaults?.maxConcurrent;
+    if (engine.strictVoiceMap && voices !== undefined) {
+      for (const [lang, voice] of Object.entries(voices)) {
+        if (!engine.voices.some((v) => v.id === voice)) throw new RangeError(`${id} voices.${lang}: ${voice} is not in the catalog`);
+      }
+    }
     engines.set(id, {
       engine,
       config: {

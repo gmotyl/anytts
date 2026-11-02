@@ -155,9 +155,10 @@ listEngines();
 //   { id: "cartesia", label: "Cartesia", runtimes: ["node"] },
 //   { id: "speechify", label: "Speechify", runtimes: ["node"] },
 //   { id: "azure", label: "Azure Speech (F0)", runtimes: ["node"] },
+//   { id: "openai", label: "OpenAI-compatible (custom server)", runtimes: ["node"] },
 //   { id: "cascade", label: "Cascade (first engine that answers)", runtimes: ["browser", "node"] },
 // ]
-listVoices("edge"); // [{ id, label, locale, gender, multilingual }, …]; [] for an unknown engine or "cascade"
+listVoices("edge"); // [{ id, label, locale, gender, multilingual }, …]; [] for an unknown engine, "cascade" or "openai" (its voices are the app's `catalog`)
 
 const saved = loadSettings(); // e.g. { engine: "edge", voice: "pl-PL-MarekNeural" }
 const { voice, fellBack } = resolveVoice(tts, { engine: saved.engine, voice: saved.voice, lang: "pl" });
@@ -289,6 +290,87 @@ result with the map and an ElevenLabs result without it never collide.
 
 > Since 0.4.0 an `edge` request with a `lang` gets the `pl` preset applied by the library. If you
 > already call `applyPronunciation` yourself, set `edge: { pronunciation: false }` or stop doing it.
+
+## OpenAI-compatible servers: `openai`
+
+`openai` speaks to one server you run that implements OpenAI's `POST /v1/audio/speech`:
+OmniVoice (k2-fsa) behind `omnivoice-server`, Kokoro-FastAPI,
+openedai-speech, or OpenAI itself. The library ships no voice list for it: the app passes the
+server's voices as `catalog`, and every voice check uses that list.
+
+| option          | meaning                                                                                                                                                                             |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseUrl`       | **Required.** Server root, e.g. `http://127.0.0.1:8890`; the engine appends `/v1/audio/speech` to the path (query string kept, fragment dropped). Must be `http(s)`.                |
+| `catalog`       | **Required.** The server's voices as `VoiceInfo[]` (`id`, `label`, `locale`, `gender`, `multilingual`); non-empty, unique ids.                                                      |
+| `apiKey`        | Sent as `Authorization: Bearer` only when set. A local server usually needs none.                                                                                                   |
+| `model`         | Default `"tts-1"`.                                                                                                                                                                  |
+| `languageField` | Body field that carries the request language (OmniVoice: `"language"`). Unset: the language is never sent. Cannot be `input`, `voice`, `model` or `response_format` (`RangeError`). |
+| `extraBody`     | Merged into every request body (e.g. `{ num_step: 16 }`); cannot override `input`, `voice`, `model` or `response_format`.                                                           |
+| `firstByteMs`   | Wait for the response headers. Default 15000 in Node (a local model sends them only after the whole clip is generated); 20000 for the browser relay client.                         |
+| `stallMs`       | Gap between body chunks. Default 8000.                                                                                                                                              |
+| `fetch`         | A `fetch` to use instead of the global one.                                                                                                                                         |
+
+It also takes the shared engine fields `voices`, `maxConcurrent`, `retries` and `pronunciation`.
+
+The request body is `{ ...extraBody, input, voice, model, response_format: "mp3" }`. With
+`languageField` set, the base of the request's `lang` (`pl-PL` → `pl`) is added under that name,
+but only when it differs from the base of the voice's `catalog` locale (like Speechify, but
+without a language table: any base is sent as is).
+
+```ts
+// Node: OmniVoice on the dev box
+import { createTts } from "anytts/server";
+
+const tts = createTts({
+  engines: {
+    openai: {
+      baseUrl: "http://127.0.0.1:8890",
+      catalog: [
+        { id: "cand-pl-f2", label: "Polish female", locale: "pl-PL", gender: "female", multilingual: true },
+        { id: "cand-en-gb-m1", label: "English male", locale: "en-GB", gender: "male", multilingual: true },
+      ],
+      languageField: "language",
+      extraBody: { num_step: 16 },
+      voices: { pl: "cand-pl-f2", default: "cand-en-gb-m1" },
+    },
+  },
+  defaultEngine: "openai",
+  scheduler: { concurrency: 2, tiers: [{ name: "play" }] },
+});
+
+await tts.synthesize({ text: "Dzień dobry.", lang: "pl" });
+```
+
+The direct engine is registered only by `anytts/server`; `anytts` registers `openai` as a relay
+client like the keyed engines. It needs the same `catalog` to check voices locally, waits 20000 ms
+for the relay's headers by default (the Node engine waits 15000), and refuses `apiKey`, `baseUrl`
+and `extraBody` with `RangeError`, since those stay on the server. `model` and `languageField` are
+ignored in the browser: set them on the server. The relay's server-side `tts` must configure
+`openai` (see [Relay protocol](#relay-protocol)):
+
+```ts
+import { createTts } from "anytts";
+
+const browserTts = createTts({
+  engines: { openai: { relayUrl: "/api/tts", catalog: VOICES } }, // VOICES: the server's catalog
+  defaultEngine: "openai",
+  scheduler: { concurrency: 2, tiers: [{ name: "play" }] },
+});
+```
+
+Notes:
+
+- **No word boundaries.** The server returns the whole clip with no timings.
+- **No streaming.** The engine hands back the whole clip. OmniVoice sends the headers only once
+  the clip is generated, hence the longer `firstByteMs`.
+- **`maxConcurrent` defaults to 1 (Node engine)**: a local model speaks one clip at a time. Set it if your
+  server handles more.
+- **Voice map values must be in the catalog.** `voices` defaults to `{ default: catalog[0].id }`;
+  a `voices` entry outside `catalog` throws `RangeError` at `createTts`, in Node and the browser.
+- **Not keyed.** No `apiKey` is fine: the cascade never skips `openai` for a missing key. A
+  refused connection or 5xx is `network`, 401 `unauthorized`, 429 `rate-limited`, any other 4xx
+  `rejected`; there is no quota.
+- One server per `Tts`: the id is fixed to `openai`.
 
 ## Cascade
 

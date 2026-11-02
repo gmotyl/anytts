@@ -22,6 +22,8 @@ const ENGINES: readonly { info: EngineInfo; voices: readonly VoiceInfo[] }[] = [
   { info: { id: "cartesia", label: "Cartesia", runtimes: ["node"] }, voices: CARTESIA_VOICES },
   { info: { id: "speechify", label: "Speechify", runtimes: ["node"] }, voices: SPEECHIFY_VOICES },
   { info: { id: "azure", label: "Azure Speech (F0)", runtimes: ["node"] }, voices: AZURE_VOICES },
+  // A user-run server: its voices depend on the model, so apps keep their own catalog.
+  { info: { id: "openai", label: "OpenAI-compatible (custom server)", runtimes: ["node"] }, voices: [] },
   // The chain over the other engines: no voices of its own.
   { info: { id: "cascade", label: "Cascade (first engine that answers)", runtimes: ["browser", "node"] }, voices: [] },
 ];

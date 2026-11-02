@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { VoiceInfo } from "../../engine.js";
 import { TtsError } from "../../errors.js";
 import { createTts, type TtsConfig } from "../../tts.js";
 import { ELEVENLABS_VOICE_MAP } from "../elevenlabs/voices.js";
-import { createRelayCascade, createRelayEngine } from "../relayEngine.js";
+import { createOpenAIRelayEngine, createRelayCascade, createRelayEngine } from "../relayEngine.js";
 
 const RELAY = "https://relay.test/tts";
 const AUDIO = new Uint8Array([0x49, 0x44, 0x33, 1, 2, 3]);
@@ -197,6 +198,111 @@ describe("browser relay clients", () => {
     expect(tts.engineStatus("elevenlabs").state).toBe("ready");
     // Without a relayUrl a keyed engine cannot run in the browser.
     expect(() => createTts({ engines: { elevenlabs: {} }, defaultEngine: "elevenlabs", scheduler })).toThrow(RangeError);
+  });
+});
+
+describe("browser openai relay client", () => {
+  const PL_FEMALE: VoiceInfo = { id: "pl-female", label: "Polish female", locale: "pl-PL", gender: "female", multilingual: false };
+  const openai = (extra: Record<string, unknown> = {}): TtsConfig => ({
+    engines: { openai: { relayUrl: "/api/tts", catalog: [PL_FEMALE], ...extra } },
+    defaultEngine: "openai",
+    scheduler,
+  });
+
+  it("browser openai posts engine, text, voice and lang to the relay", async () => {
+    const fetchMock = stubRelay((body) => audio(String(body.engine), String(body.voice)));
+    const tts = createTts(openai());
+    const result = await tts.synthesize({ engine: "openai", text: "Cześć", voice: "pl-female", lang: "pl" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("/api/tts");
+    expect(JSON.parse(String(init?.body))).toEqual({ engine: "openai", text: "Cześć", voice: "pl-female", lang: "pl" });
+    expect(result).toMatchObject({ engine: "openai", voice: "pl-female" });
+  });
+
+  it("browser openai rejects a voice outside its catalog", async () => {
+    const fetchMock = stubRelay((body) => audio(String(body.engine), String(body.voice)));
+    const tts = createTts(openai());
+    const error = await rejection(tts.synthesize({ engine: "openai", text: "Hi", voice: "en-male" }));
+    expect(error.kind).toBe("unknown-voice");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("browser openai requires a catalog", () => {
+    const bare: TtsConfig = { engines: { openai: { relayUrl: "/api/tts" } }, defaultEngine: "openai", scheduler };
+    // The messages pin the openai client: an unregistered engine throws "unknown engine" instead.
+    expect(() => createTts(bare)).toThrow(RangeError);
+    expect(() => createTts(bare)).toThrow(/^openai: catalog must be non-empty$/);
+    expect(() => createTts(openai({ catalog: [] }))).toThrow(/^openai: catalog must be non-empty$/);
+    expect(() => createTts(openai({ catalog: [PL_FEMALE, PL_FEMALE] }))).toThrow(RangeError);
+    expect(() => createTts(openai({ catalog: [PL_FEMALE, PL_FEMALE] }))).toThrow(/^openai: duplicate catalog voice id: pl-female$/);
+  });
+
+  it("browser openai refuses apiKey, baseUrl and extraBody", () => {
+    for (const extra of [{ apiKey: "sk-secret" }, { baseUrl: "http://localhost:8880/v1" }, { extraBody: { speed: 1 } }]) {
+      const field = Object.keys(extra)[0]!;
+      expect(() => createTts(openai(extra))).toThrow(RangeError);
+      expect(() => createTts(openai(extra))).toThrow(new RegExp(`^openai runs in the browser through the relay: ${field} stays on the server$`));
+    }
+  });
+
+  it("browser openai keeps the relay error kind", async () => {
+    stubRelay(() => Response.json({ kind: "network" }, { status: 502 }));
+    const tts = createTts(openai());
+    const error = await rejection(tts.synthesize({ engine: "openai", text: "Hi", voice: "pl-female", lang: "pl" }));
+    expect(error.kind).toBe("network");
+    // A kind that differs from the status fallback stands too: a 502 alone would fall back to `network`, a 429 alone to `rejected`.
+    for (const [status, kind] of [
+      [502, "unauthorized"],
+      [429, "rate-limited"],
+    ] as const) {
+      stubRelay(() => Response.json({ kind }, { status }));
+      const kept = await rejection(createTts(openai()).synthesize({ engine: "openai", text: "Hi", voice: "pl-female", lang: "pl" }));
+      expect(kept.kind).toBe(kind);
+      expect(kept.status).toBe(status);
+    }
+  });
+
+  it("browser openai waits 20000 ms for the first byte by default", async () => {
+    vi.useFakeTimers();
+    try {
+      // The relay never answers; the fetch honours its abort signal.
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          (_url: string | URL | Request, init?: RequestInit) =>
+            new Promise<Response>((_resolve, reject) => {
+              init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+            }),
+        ),
+      );
+      const settle = (firstByteMs?: number) => {
+        const state: { error?: unknown } = {};
+        createOpenAIRelayEngine({ relayUrl: RELAY, catalog: [PL_FEMALE], ...(firstByteMs !== undefined ? { firstByteMs } : {}) })
+          .synthesize("Hi", "pl-female", new AbortController().signal)
+          .catch((e: unknown) => {
+            state.error = e;
+          });
+        return state;
+      };
+      const byDefault = settle();
+      // An explicit app value still wins.
+      const explicit = settle(5000);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect((explicit.error as TtsError).kind).toBe("first-byte-timeout");
+      await vi.advanceTimersByTimeAsync(14999);
+      expect(byDefault.error).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(byDefault.error).toBeInstanceOf(TtsError);
+      expect((byDefault.error as TtsError).kind).toBe("first-byte-timeout");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("browser openai voice map outside the catalog throws RangeError", () => {
+    expect(() => createTts(openai({ voices: { default: "nope" } }))).toThrow(RangeError);
+    expect(() => createTts(openai({ voices: { default: "nope" } }))).toThrow(/^openai voices\.default: nope is not in the catalog$/);
   });
 });
 

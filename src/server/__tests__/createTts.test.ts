@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AZURE_VOICE_MAP } from "../../engines/azure/voices.js";
 import { createEdgeEngine } from "../../engines/edge/engine.js";
 import { EDGE_VOICE_MAP } from "../../engines/edge/voices.js";
 import { createTts as createMainTts, type TtsConfig } from "../../tts.js";
+import type { VoiceInfo } from "../../engine.js";
 import { resolveVoice } from "../../voices.js";
 import { createTts } from "../index.js";
 
@@ -94,5 +95,89 @@ describe("anytts/server createTts", () => {
       scheduler,
     };
     expect(config.defaultEngine).toBe("edge");
+  });
+});
+
+describe("anytts/server createTts with openai", () => {
+  const baseUrl = "http://127.0.0.1:8890";
+  const catalog: VoiceInfo[] = [
+    { id: "pl-female", label: "Polish female", locale: "pl-PL", gender: "female", multilingual: false },
+    { id: "en-male", label: "English male", locale: "en-US", gender: "male", multilingual: false },
+  ];
+
+  /** Edge with its network call replaced: records the voices it spoke. */
+  const fakeEdge = (spoken: string[]) => ({
+    edge: (options: Record<string, unknown>) => ({
+      ...createEdgeEngine(options),
+      synthesize: async (_text: string, voice: string) => {
+        spoken.push(voice);
+        return new Uint8Array([1]).buffer;
+      },
+    }),
+  });
+
+  it("server createTts synthesizes with the openai engine", async () => {
+    const fetch = vi.fn(async () => audio());
+    const tts = createTts({ engines: { openai: { baseUrl, catalog, fetch } }, defaultEngine: "openai", scheduler });
+    await expect(tts.synthesize({ text: "cześć", voice: "pl-female" })).resolves.toMatchObject({ engine: "openai", voice: "pl-female" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("openai rejects a voice outside its catalog without a request", async () => {
+    const fetch = vi.fn(async () => audio());
+    const tts = createTts({ engines: { openai: { baseUrl, catalog, fetch } }, defaultEngine: "openai", scheduler });
+    await expect(tts.synthesize({ text: "hi", voice: "auto" })).rejects.toMatchObject({ kind: "unknown-voice" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("openai voice map outside the catalog throws RangeError", () => {
+    expect(() =>
+      createTts({ engines: { openai: { baseUrl, catalog, voices: { default: "nope" } } }, defaultEngine: "openai", scheduler }),
+    ).toThrow(RangeError);
+    expect(() =>
+      createTts({ engines: { openai: { baseUrl, catalog, voices: { default: "pl-female", en: "nope" } } }, defaultEngine: "openai", scheduler }),
+    ).toThrow(RangeError);
+  });
+
+  it("cascade tries openai without an apiKey", async () => {
+    const fetch = vi.fn(async () => audio());
+    const spoken: string[] = [];
+    const tts = createTts(
+      { engines: { openai: { baseUrl, catalog, fetch }, edge: {}, cascade: { order: ["openai", "edge"] } }, defaultEngine: "cascade", scheduler },
+      { engineFactories: fakeEdge(spoken) },
+    );
+    expect(tts.engineStatus("openai").state).not.toBe("no-key");
+    await expect(tts.synthesize({ text: "cześć" })).resolves.toMatchObject({ engine: "openai" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(spoken).toEqual([]);
+  });
+
+  it("cascade moves past an unreachable openai server", async () => {
+    const fetch = vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    });
+    const spoken: string[] = [];
+    const tts = createTts(
+      { engines: { openai: { baseUrl, catalog, fetch, retries: 0 }, edge: {}, cascade: { order: ["openai", "edge"] } }, defaultEngine: "cascade", scheduler },
+      { engineFactories: fakeEdge(spoken) },
+    );
+    await expect(tts.synthesize({ text: "cześć", lang: "pl" })).resolves.toMatchObject({ engine: "edge", voice: EDGE_VOICE_MAP.pl });
+    expect(fetch).toHaveBeenCalled();
+    expect(spoken).toEqual([EDGE_VOICE_MAP.pl]);
+  });
+
+  it("openai runs one attempt at a time by default", async () => {
+    const { fetch, calls } = heldFetch();
+    const tts = createTts({ engines: { openai: { baseUrl, catalog, fetch } }, defaultEngine: "openai", scheduler });
+    const first = tts.synthesize({ text: "jeden" });
+    const second = tts.synthesize({ text: "dwa" });
+    await flush();
+    expect(calls).toHaveLength(1);
+    calls[0]!.answer();
+    await first;
+    await flush();
+    expect(calls).toHaveLength(2);
+    calls[1]!.answer();
+    await expect(second).resolves.toMatchObject({ engine: "openai" });
   });
 });
