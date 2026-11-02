@@ -1,5 +1,6 @@
 // Browser-side clients of the relay (`anytts/server`). They hold no key and import no keyed engine
-// code: only the static voice catalogs, so the main entry stays free of key-handling code.
+// code: only the static voice catalogs (the app-supplied one for `openai`), so the main entry stays
+// free of key-handling code.
 import type { Engine, EngineHooks, VoiceInfo, VoiceMap } from "../engine.js";
 import { TtsError, type TtsErrorKind } from "../errors.js";
 import { AZURE_VOICE_MAP, AZURE_VOICES } from "./azure/voices.js";
@@ -205,10 +206,53 @@ export function createRelayEngine(id: string, options: RelayEngineOptions): Engi
   };
 }
 
-/** The relay clients the main entry registers for the keyed engine ids. */
-export const RELAY_ENGINES: Record<string, (options: Record<string, unknown>) => Engine> = Object.fromEntries(
-  Object.keys(CATALOGS).map((id) => [id, (options: Record<string, unknown>) => createRelayEngine(id, options as unknown as RelayEngineOptions)]),
-);
+/** The browser `openai` client: the relay options plus the app's voice `catalog`. */
+export interface OpenAIRelayEngineOptions extends RelayEngineOptions {
+  /** The voices the relay's `openai` engine offers; voice checks run on it locally. Non-empty, unique ids. */
+  catalog: VoiceInfo[];
+  baseUrl?: never;
+  extraBody?: never;
+}
+
+/** Server-only `openai` fields: refused rather than ignored, so none of them reaches the browser. */
+const OPENAI_SERVER_FIELDS = ["apiKey", "baseUrl", "extraBody"] as const;
+
+/**
+ * `openai` as a relay client: `POST { engine: "openai", text, voice, lang? }`. Its voices are the
+ * app-supplied `catalog`, validated as the Node engine validates it; the default voice is the first.
+ */
+export function createOpenAIRelayEngine(options: OpenAIRelayEngineOptions): Engine {
+  const raw = options as unknown as Record<string, unknown>;
+  for (const field of OPENAI_SERVER_FIELDS) {
+    if (raw[field] !== undefined) throw new RangeError(`openai runs in the browser through the relay: ${field} stays on the server`);
+  }
+  const { catalog } = options;
+  if (!Array.isArray(catalog) || catalog.length === 0) throw new RangeError("openai: catalog must be non-empty");
+  const ids = new Set<string>();
+  for (const voice of catalog) {
+    if (ids.has(voice.id)) throw new RangeError(`openai: duplicate catalog voice id: ${voice.id}`);
+    ids.add(voice.id);
+  }
+  const fetchOpts = fetchOptions("openai", raw, DEFAULT_MS);
+  return {
+    id: "openai",
+    voices: catalog,
+    strictVoiceMap: true,
+    defaults: { voices: { default: catalog[0]!.id } },
+    async synthesize(text, voice, signal, hooks, lang) {
+      const body = { engine: "openai", text, voice, ...(lang !== undefined ? { lang } : {}) };
+      return (await relayFetch(fetchOpts, body, signal, hooks)).bytes;
+    },
+  };
+}
+
+/** The relay clients the main entry registers for the keyed engine ids and `openai`. */
+export const RELAY_ENGINES: Record<string, (options: Record<string, unknown>) => Engine> = {
+  ...Object.fromEntries(
+    Object.keys(CATALOGS).map((id) => [id, (options: Record<string, unknown>) => createRelayEngine(id, options as unknown as RelayEngineOptions)]),
+  ),
+  openai: (options) => createOpenAIRelayEngine(options as unknown as OpenAIRelayEngineOptions),
+};
 
 /** A browser cascade request body; the relay walks the chain. */
 export interface CascadeRelayBody {

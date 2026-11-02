@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { VoiceInfo } from "../../engine.js";
 import { TtsError } from "../../errors.js";
 import { createTts, type TtsConfig } from "../../tts.js";
 import { ELEVENLABS_VOICE_MAP } from "../elevenlabs/voices.js";
@@ -197,6 +198,54 @@ describe("browser relay clients", () => {
     expect(tts.engineStatus("elevenlabs").state).toBe("ready");
     // Without a relayUrl a keyed engine cannot run in the browser.
     expect(() => createTts({ engines: { elevenlabs: {} }, defaultEngine: "elevenlabs", scheduler })).toThrow(RangeError);
+  });
+});
+
+describe("browser openai relay client", () => {
+  const PL_FEMALE: VoiceInfo = { id: "pl-female", label: "Polish female", locale: "pl-PL", gender: "female", multilingual: false };
+  const openai = (extra: Record<string, unknown> = {}): TtsConfig => ({
+    engines: { openai: { relayUrl: "/api/tts", catalog: [PL_FEMALE], ...extra } },
+    defaultEngine: "openai",
+    scheduler,
+  });
+
+  it("browser openai posts engine, text, voice and lang to the relay", async () => {
+    const fetchMock = stubRelay((body) => audio(String(body.engine), String(body.voice)));
+    const tts = createTts(openai());
+    const result = await tts.synthesize({ engine: "openai", text: "Cześć", voice: "pl-female", lang: "pl" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("/api/tts");
+    expect(JSON.parse(String(init?.body))).toEqual({ engine: "openai", text: "Cześć", voice: "pl-female", lang: "pl" });
+    expect(result).toMatchObject({ engine: "openai", voice: "pl-female" });
+  });
+
+  it("browser openai rejects a voice outside its catalog", async () => {
+    const fetchMock = stubRelay((body) => audio(String(body.engine), String(body.voice)));
+    const tts = createTts(openai());
+    const error = await rejection(tts.synthesize({ engine: "openai", text: "Hi", voice: "en-male" }));
+    expect(error.kind).toBe("unknown-voice");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("browser openai requires a catalog", () => {
+    const bare: TtsConfig = { engines: { openai: { relayUrl: "/api/tts" } }, defaultEngine: "openai", scheduler };
+    expect(() => createTts(bare)).toThrow(RangeError);
+    expect(() => createTts(openai({ catalog: [] }))).toThrow(RangeError);
+    expect(() => createTts(openai({ catalog: [PL_FEMALE, PL_FEMALE] }))).toThrow(RangeError);
+  });
+
+  it("browser openai refuses apiKey, baseUrl and extraBody", () => {
+    for (const extra of [{ apiKey: "sk-secret" }, { baseUrl: "http://localhost:8880/v1" }, { extraBody: { speed: 1 } }]) {
+      expect(() => createTts(openai(extra))).toThrow(RangeError);
+    }
+  });
+
+  it("browser openai keeps the relay error kind", async () => {
+    stubRelay(() => Response.json({ kind: "network" }, { status: 502 }));
+    const tts = createTts(openai());
+    const error = await rejection(tts.synthesize({ engine: "openai", text: "Hi", voice: "pl-female", lang: "pl" }));
+    expect(error.kind).toBe("network");
   });
 });
 
