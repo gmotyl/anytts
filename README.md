@@ -300,7 +300,7 @@ server's voices as `catalog`, and every voice check uses that list.
 
 | option          | meaning                                                                                                                                                                             |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `baseUrl`       | **Required.** Server root, e.g. `http://127.0.0.1:8890`; the engine appends `/v1/audio/speech`. Must be `http(s)`.                                                                  |
+| `baseUrl`       | **Required.** Server root, e.g. `http://127.0.0.1:8890`; the engine appends `/v1/audio/speech` to the path (query string kept, fragment dropped). Must be `http(s)`.                |
 | `catalog`       | **Required.** The server's voices as `VoiceInfo[]` (`id`, `label`, `locale`, `gender`, `multilingual`); non-empty, unique ids.                                                      |
 | `apiKey`        | Sent as `Authorization: Bearer` only when set. A local server usually needs none.                                                                                                   |
 | `model`         | Default `"tts-1"`.                                                                                                                                                                  |

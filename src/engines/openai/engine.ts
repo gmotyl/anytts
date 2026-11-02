@@ -67,7 +67,11 @@ export function createOpenAIEngine(options: OpenAIEngineOptions): Engine & {
 } {
   validate(options);
   const { baseUrl, catalog, apiKey, model = "tts-1", languageField, extraBody, firstByteMs = 15000 } = options;
-  const url = `${baseUrl.replace(/\/+$/, "")}/v1/audio/speech`;
+  // Append the speech path to the pathname so a baseUrl query survives intact; drop any fragment.
+  const endpoint = new URL(baseUrl);
+  endpoint.pathname = `${endpoint.pathname.replace(/\/+$/, "")}/v1/audio/speech`;
+  endpoint.hash = "";
+  const url = endpoint.toString();
   const fetchOptions = { ...options, firstByteMs };
 
   async function synthesize(

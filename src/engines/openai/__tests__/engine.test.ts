@@ -59,6 +59,18 @@ describe("createOpenAIEngine", () => {
     expect(String(fetch.mock.calls[0]![0])).toBe("http://h:8890/v1/audio/speech");
   });
 
+  it("keeps a baseUrl query after the speech path", async () => {
+    const fetch = okFetch();
+    await engineWith(fetch, { baseUrl: "https://h.example/base/?token=abc#frag" }).synthesize(
+      "Hello",
+      "en-female",
+      signal(),
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(String(fetch.mock.calls[0]![0])).toBe("https://h.example/base/v1/audio/speech?token=abc");
+  });
+
   it("sends Bearer only when apiKey is set", async () => {
     const withKey = okFetch();
     await engineWith(withKey, { apiKey: "secret" }).synthesize("Hello", "en-female", signal());
