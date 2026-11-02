@@ -298,21 +298,24 @@ OmniVoice (k2-fsa) behind `omnivoice-server`, Kokoro-FastAPI,
 openedai-speech, or OpenAI itself. The library ships no voice list for it: the app passes the
 server's voices as `catalog`, and every voice check uses that list.
 
-| option          | meaning                                                                                                                                |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `baseUrl`       | **Required.** Server root, e.g. `http://127.0.0.1:8890`; the engine appends `/v1/audio/speech`. Must be `http(s)`.                     |
-| `catalog`       | **Required.** The server's voices as `VoiceInfo[]` (`id`, `label`, `locale`, `gender`, `multilingual`); non-empty, unique ids.         |
-| `apiKey`        | Sent as `Authorization: Bearer` only when set. A local server usually needs none.                                                      |
-| `model`         | Default `"tts-1"`.                                                                                                                     |
-| `languageField` | Body field that carries the request language (OmniVoice: `"language"`). Unset: the language is never sent.                             |
-| `extraBody`     | Merged into every request body (e.g. `{ num_step: 16 }`); cannot override `input`, `voice`, `model` or `response_format`.              |
-| `firstByteMs`   | Wait for the response headers. Default 15000: a local model sends them only after the whole clip is generated.                         |
-| `stallMs`       | Gap between body chunks. Default 8000.                                                                                                 |
-| `fetch`         | A `fetch` to use instead of the global one.                                                                                            |
+| option          | meaning                                                                                                                                                                             |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseUrl`       | **Required.** Server root, e.g. `http://127.0.0.1:8890`; the engine appends `/v1/audio/speech`. Must be `http(s)`.                                                                  |
+| `catalog`       | **Required.** The server's voices as `VoiceInfo[]` (`id`, `label`, `locale`, `gender`, `multilingual`); non-empty, unique ids.                                                      |
+| `apiKey`        | Sent as `Authorization: Bearer` only when set. A local server usually needs none.                                                                                                   |
+| `model`         | Default `"tts-1"`.                                                                                                                                                                  |
+| `languageField` | Body field that carries the request language (OmniVoice: `"language"`). Unset: the language is never sent. Cannot be `input`, `voice`, `model` or `response_format` (`RangeError`). |
+| `extraBody`     | Merged into every request body (e.g. `{ num_step: 16 }`); cannot override `input`, `voice`, `model` or `response_format`.                                                           |
+| `firstByteMs`   | Wait for the response headers. Default 15000 in Node (a local model sends them only after the whole clip is generated); 20000 for the browser relay client.                         |
+| `stallMs`       | Gap between body chunks. Default 8000.                                                                                                                                              |
+| `fetch`         | A `fetch` to use instead of the global one.                                                                                                                                         |
+
+It also takes the shared engine fields `voices`, `maxConcurrent`, `retries` and `pronunciation`.
 
 The request body is `{ ...extraBody, input, voice, model, response_format: "mp3" }`. With
 `languageField` set, the base of the request's `lang` (`pl-PL` → `pl`) is added under that name,
-but only when it differs from the base of the voice's `catalog` locale, as for Speechify.
+but only when it differs from the base of the voice's `catalog` locale (like Speechify, but
+without a language table: any base is sent as is).
 
 ```ts
 // Node: OmniVoice on the dev box
@@ -324,11 +327,11 @@ const tts = createTts({
       baseUrl: "http://127.0.0.1:8890",
       catalog: [
         { id: "cand-pl-f2", label: "Polish female", locale: "pl-PL", gender: "female", multilingual: true },
-        { id: "cand-en-m1", label: "English male", locale: "en-US", gender: "male", multilingual: true },
+        { id: "cand-en-gb-m1", label: "English male", locale: "en-GB", gender: "male", multilingual: true },
       ],
       languageField: "language",
       extraBody: { num_step: 16 },
-      voices: { pl: "cand-pl-f2", default: "cand-en-m1" },
+      voices: { pl: "cand-pl-f2", default: "cand-en-gb-m1" },
     },
   },
   defaultEngine: "openai",
@@ -338,9 +341,12 @@ const tts = createTts({
 await tts.synthesize({ text: "Dzień dobry.", lang: "pl" });
 ```
 
-`openai` is registered only by `anytts/server`. In the browser it is a relay client like the
-keyed engines; it needs the same `catalog` to check voices locally, and refuses `apiKey`,
-`baseUrl` and `extraBody` with `RangeError`, since those stay on the server:
+The direct engine is registered only by `anytts/server`; `anytts` registers `openai` as a relay
+client like the keyed engines. It needs the same `catalog` to check voices locally, waits 20000 ms
+for the relay's headers by default (the Node engine waits 15000), and refuses `apiKey`, `baseUrl`
+and `extraBody` with `RangeError`, since those stay on the server. `model` and `languageField` are
+ignored in the browser: set them on the server. The relay's server-side `tts` must configure
+`openai` (see [Relay protocol](#relay-protocol)):
 
 ```ts
 import { createTts } from "anytts";
@@ -355,9 +361,9 @@ const browserTts = createTts({
 Notes:
 
 - **No word boundaries.** The server returns the whole clip with no timings.
-- **No streaming.** The headers arrive only once the clip is generated, hence the longer
-  `firstByteMs`.
-- **`maxConcurrent` defaults to 1**: a local model speaks one clip at a time. Set it if your
+- **No streaming.** The engine hands back the whole clip. OmniVoice sends the headers only once
+  the clip is generated, hence the longer `firstByteMs`.
+- **`maxConcurrent` defaults to 1 (Node engine)**: a local model speaks one clip at a time. Set it if your
   server handles more.
 - **Voice map values must be in the catalog.** `voices` defaults to `{ default: catalog[0].id }`;
   a `voices` entry outside `catalog` throws `RangeError` at `createTts`, in Node and the browser.
