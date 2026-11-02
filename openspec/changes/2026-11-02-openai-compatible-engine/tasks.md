@@ -105,9 +105,9 @@ export function createOpenAIEngine(options: OpenAIEngineOptions): Engine & {
 - "browser openai refuses apiKey, baseUrl and extraBody"
 - "browser openai keeps the relay error kind"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/__tests__/relayEngine.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src && git commit -m "feat(relay): browser relay client for openai"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/__tests__/relayEngine.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
+- [x] **Step 3: Commit** — `git add src && git commit -m "feat(relay): browser relay client for openai"`
 
 ### Task 4: Registry entry
 
@@ -123,9 +123,9 @@ export function createOpenAIEngine(options: OpenAIEngineOptions): Engine & {
 - "listEngines includes the openai engine for node"
 - "listVoices returns no static voices for openai"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/__tests__/registry.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src && git commit -m "feat(registry): list the openai engine"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/__tests__/registry.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
+- [x] **Step 3: Commit** — `git add src && git commit -m "feat(registry): list the openai engine"`
 
 ### Task 5: Docs, live smoke, version and PR
 
