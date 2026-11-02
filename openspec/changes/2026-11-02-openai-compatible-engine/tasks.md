@@ -54,9 +54,9 @@ export function createOpenAIEngine(options: OpenAIEngineOptions): Engine & {
 - "throws RangeError on missing or invalid baseUrl or catalog"
 - "defaults: keyed false, maxConcurrent 1, first catalog voice as default"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/openai` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** (reuse `keyedFetch` and `RefusalRules` with `isQuota: () => false`) — Run: `pnpm vitest run src/engines/openai && pnpm lint` — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/engines/openai && git commit -m "feat(openai): OpenAI-compatible speech engine"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/openai` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** (reuse `keyedFetch` and `RefusalRules` with `isQuota: () => false`) — Run: `pnpm vitest run src/engines/openai && pnpm lint` — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/engines/openai && git commit -m "feat(openai): OpenAI-compatible speech engine"`
 
 ### Task 2: Register `openai` in `anytts/server` and check the voice map at construction
 
