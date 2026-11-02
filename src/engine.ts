@@ -37,6 +37,11 @@ export interface Engine {
   defaults?: EngineDefaults;
   /** Needs an `apiKey` in its config: the cascade skips it, without a request, when none is set. */
   keyed?: boolean;
+  /**
+   * Its effective voice map is checked at construction: a value outside `voices` makes `createTts`
+   * throw RangeError (for an engine whose catalog is the app's own, a typo is a config error).
+   */
+  strictVoiceMap?: boolean;
   /** `lang` is the request language, when the request has one; an engine may ignore it. */
   synthesize(text: string, voice: string, signal: AbortSignal, hooks?: EngineHooks, lang?: string): Promise<ArrayBuffer>;
 }

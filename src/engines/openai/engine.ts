@@ -56,6 +56,7 @@ function validate(options: OpenAIEngineOptions): void {
 
 export function createOpenAIEngine(options: OpenAIEngineOptions): Engine & {
   keyed: false;
+  strictVoiceMap: true;
   defaults: { voices: VoiceMap; maxConcurrent: number };
 } {
   validate(options);
@@ -85,6 +86,7 @@ export function createOpenAIEngine(options: OpenAIEngineOptions): Engine & {
   return {
     id: "openai",
     keyed: false,
+    strictVoiceMap: true,
     voices: catalog,
     defaults: { voices: { default: catalog[0]!.id }, maxConcurrent: 1 },
     synthesize,

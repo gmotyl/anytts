@@ -3,6 +3,7 @@ import { createEdgeEngine } from "../engines/edge/engine.js";
 import { createAzureEngine } from "../engines/azure/engine.js";
 import { createCartesiaEngine } from "../engines/cartesia/engine.js";
 import { createElevenLabsEngine } from "../engines/elevenlabs/engine.js";
+import { createOpenAIEngine, type OpenAIEngineOptions } from "../engines/openai/engine.js";
 import { createSpeechifyEngine } from "../engines/speechify/engine.js";
 import { createTts as createBrowserSafeTts, type CreateTtsInternals, type EngineFactory, type Tts, type TtsConfig } from "../tts.js";
 import { createRelayHandlerWith, type RelayHandlerOptions } from "./relay.js";
@@ -10,19 +11,30 @@ import { createRelayHandlerWith, type RelayHandlerOptions } from "./relay.js";
 export type { AzureEngineOptions } from "../engines/azure/engine.js";
 export type { CartesiaEngineOptions } from "../engines/cartesia/engine.js";
 export type { ElevenLabsEngineOptions } from "../engines/elevenlabs/engine.js";
+export type { OpenAIEngineOptions } from "../engines/openai/engine.js";
 export type { SpeechifyEngineOptions } from "../engines/speechify/engine.js";
 
-/** Keyed engines hold API keys, so only this (Node) entry registers them. */
-const KEYED_ENGINES: Record<string, EngineFactory> = {
+/**
+ * Engines only this (Node) entry registers: the keyed ones hold API keys, and `openai` talks to a
+ * server (often local) that a browser should reach through the relay.
+ */
+const NODE_ENGINES: Record<string, EngineFactory> = {
   elevenlabs: createElevenLabsEngine,
   cartesia: createCartesiaEngine,
   speechify: createSpeechifyEngine,
   azure: createAzureEngine,
+  // Its options have required fields (`baseUrl`, `catalog`) that an untyped config may lack; the
+  // engine checks them itself and throws RangeError, so the factory options are cast here.
+  openai: (options) => createOpenAIEngine(options as unknown as OpenAIEngineOptions),
 };
 
-/** `createTts` from `anytts`, plus the keyed engines (`elevenlabs`, `cartesia`, `speechify`, `azure`). */
+/**
+ * `createTts` from `anytts`, plus the keyed engines (`elevenlabs`, `cartesia`, `speechify`, `azure`)
+ * and `openai` (an OpenAI-compatible speech server; its `apiKey` is optional, so the cascade never
+ * skips it as keyless).
+ */
 export function createTts(config: TtsConfig, internals: CreateTtsInternals = {}): Tts {
-  return createBrowserSafeTts(config, { ...internals, engineFactories: { ...KEYED_ENGINES, ...internals.engineFactories } });
+  return createBrowserSafeTts(config, { ...internals, engineFactories: { ...NODE_ENGINES, ...internals.engineFactories } });
 }
 
 export type CreateRelayHandlerOptions = RelayHandlerOptions;
