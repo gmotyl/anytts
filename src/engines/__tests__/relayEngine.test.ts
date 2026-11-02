@@ -3,7 +3,7 @@ import type { VoiceInfo } from "../../engine.js";
 import { TtsError } from "../../errors.js";
 import { createTts, type TtsConfig } from "../../tts.js";
 import { ELEVENLABS_VOICE_MAP } from "../elevenlabs/voices.js";
-import { createRelayCascade, createRelayEngine } from "../relayEngine.js";
+import { createOpenAIRelayEngine, createRelayCascade, createRelayEngine } from "../relayEngine.js";
 
 const RELAY = "https://relay.test/tts";
 const AUDIO = new Uint8Array([0x49, 0x44, 0x33, 1, 2, 3]);
@@ -260,6 +260,43 @@ describe("browser openai relay client", () => {
       const kept = await rejection(createTts(openai()).synthesize({ engine: "openai", text: "Hi", voice: "pl-female", lang: "pl" }));
       expect(kept.kind).toBe(kind);
       expect(kept.status).toBe(status);
+    }
+  });
+
+  it("browser openai waits 20000 ms for the first byte by default", async () => {
+    vi.useFakeTimers();
+    try {
+      // The relay never answers; the fetch honours its abort signal.
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          (_url: string | URL | Request, init?: RequestInit) =>
+            new Promise<Response>((_resolve, reject) => {
+              init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+            }),
+        ),
+      );
+      const settle = (firstByteMs?: number) => {
+        const state: { error?: unknown } = {};
+        createOpenAIRelayEngine({ relayUrl: RELAY, catalog: [PL_FEMALE], ...(firstByteMs !== undefined ? { firstByteMs } : {}) })
+          .synthesize("Hi", "pl-female", new AbortController().signal)
+          .catch((e: unknown) => {
+            state.error = e;
+          });
+        return state;
+      };
+      const byDefault = settle();
+      // An explicit app value still wins.
+      const explicit = settle(5000);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect((explicit.error as TtsError).kind).toBe("first-byte-timeout");
+      await vi.advanceTimersByTimeAsync(14999);
+      expect(byDefault.error).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(byDefault.error).toBeInstanceOf(TtsError);
+      expect((byDefault.error as TtsError).kind).toBe("first-byte-timeout");
+    } finally {
+      vi.useRealTimers();
     }
   });
 

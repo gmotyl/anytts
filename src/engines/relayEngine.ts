@@ -20,7 +20,7 @@ export interface RelayFetchOptions {
 export interface RelayEngineOptions {
   /** The relay endpoint (`createRelayHandler` from `anytts/server`). */
   relayUrl: string;
-  /** Max wait for the relay's response headers. Default 8000 (20000 for `cascade`). */
+  /** Max wait for the relay's response headers. Default 8000 (20000 for `cascade` and `openai`). */
   firstByteMs?: number;
   /** Max gap between body chunks. Default 8000. */
   stallMs?: number;
@@ -50,6 +50,11 @@ const KINDS: ReadonlySet<string> = new Set<TtsErrorKind>([
 const DEFAULT_MS = 8000;
 /** A cascade relay may walk several members before it answers. */
 const DEFAULT_CASCADE_FIRST_BYTE_MS = 20000;
+/**
+ * The browser `openai` client's header wait: the relay answers only after the whole clip is
+ * generated, and the Node engine itself waits 15000 ms, so the browser must outlast it.
+ */
+const DEFAULT_OPENAI_FIRST_BYTE_MS = 20000;
 
 const abortError = () => new DOMException("The operation was aborted.", "AbortError");
 
@@ -233,7 +238,7 @@ export function createOpenAIRelayEngine(options: OpenAIRelayEngineOptions): Engi
     if (ids.has(voice.id)) throw new RangeError(`openai: duplicate catalog voice id: ${voice.id}`);
     ids.add(voice.id);
   }
-  const fetchOpts = fetchOptions("openai", raw, DEFAULT_MS);
+  const fetchOpts = fetchOptions("openai", raw, DEFAULT_OPENAI_FIRST_BYTE_MS);
   return {
     id: "openai",
     voices: catalog,
