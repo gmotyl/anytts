@@ -139,6 +139,6 @@ script against the running server: `createTts` from `dist/server` with `openai: 
 synthesizing one Polish sentence — Expected: all green, and the script writes a non-empty MP3
 whose first bytes are `ID3` or `0xFFFB`.
 
-- [ ] **Step 1: README + version bump** — Run: `pnpm build && pnpm test && pnpm lint` — Expected: PASS
-- [ ] **Step 2: Live smoke against omnivoice-server** (`/srv/git/prv/omnivoice-server/omnivoicectl status` healthy first) — Expected: MP3 bytes
-- [ ] **Step 3: Commit, push and open the PR to `main`** — `git commit -am "docs: openai engine; 0.6.0" && git push -u origin feat/openai-compatible-engine && gh pr create --base main` — then the release tag after merge (`v0.6.0` stages to npm; Greg approves with 2FA)
+- [x] **Step 1: README + version bump** — Run: `pnpm build && pnpm test && pnpm lint` — Expected: PASS
+- [x] **Step 2: Live smoke against omnivoice-server** (`/srv/git/prv/omnivoice-server/omnivoicectl status` healthy first) — Expected: MP3 bytes
+- [x] **Step 3: Commit, push and open the PR to `main`** — `git commit -am "docs: openai engine; 0.6.0" && git push -u origin feat/openai-compatible-engine && gh pr create --base main` — then the release tag after merge (`v0.6.0` stages to npm; Greg approves with 2FA)
