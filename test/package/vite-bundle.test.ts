@@ -18,6 +18,11 @@ const KEYED_MARKERS = [
   "createAzureEngine",
   "keyedFetch",
   "no apiKey configured",
+  // Server-only openai/kokoro engines (the main entry has relay clients for both ids).
+  "createOpenAIEngine",
+  "createKokoroEngine",
+  "/v1/audio/speech",
+  "is set by the engine",
 ];
 const ENGINE_MARKERS = ["TrustedClientToken", "speech.platform.bing.com", "Sec-MS-GEC", "createEdgeEngine"];
 

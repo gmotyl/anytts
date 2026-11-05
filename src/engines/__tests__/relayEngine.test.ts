@@ -3,7 +3,7 @@ import type { VoiceInfo } from "../../engine.js";
 import { TtsError } from "../../errors.js";
 import { createTts, type TtsConfig } from "../../tts.js";
 import { ELEVENLABS_VOICE_MAP } from "../elevenlabs/voices.js";
-import { createOpenAIRelayEngine, createRelayCascade, createRelayEngine } from "../relayEngine.js";
+import { createKokoroRelayEngine, createOpenAIRelayEngine, createRelayCascade, createRelayEngine } from "../relayEngine.js";
 
 const RELAY = "https://relay.test/tts";
 const AUDIO = new Uint8Array([0x49, 0x44, 0x33, 1, 2, 3]);
@@ -303,6 +303,85 @@ describe("browser openai relay client", () => {
   it("browser openai voice map outside the catalog throws RangeError", () => {
     expect(() => createTts(openai({ voices: { default: "nope" } }))).toThrow(RangeError);
     expect(() => createTts(openai({ voices: { default: "nope" } }))).toThrow(/^openai voices\.default: nope is not in the catalog$/);
+  });
+});
+
+describe("browser kokoro relay client", () => {
+  const kokoro = (extra: Record<string, unknown> = {}): TtsConfig => ({
+    engines: { kokoro: { relayUrl: "/api/tts", ...extra } },
+    defaultEngine: "kokoro",
+    scheduler,
+  });
+
+  it("browser kokoro request reaches the relay with its language", async () => {
+    const fetchMock = stubRelay((body) => audio(String(body.engine), String(body.voice)));
+    const tts = createTts(kokoro());
+    const result = await tts.synthesize({ engine: "kokoro", text: "Cześć", voice: "af_heart", lang: "pl" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("/api/tts");
+    expect(JSON.parse(String(init?.body))).toEqual({ engine: "kokoro", text: "Cześć", voice: "af_heart", lang: "pl" });
+    expect(result).toMatchObject({ engine: "kokoro", voice: "af_heart" });
+  });
+
+  it("browser kokoro rejects a voice outside the static catalog", async () => {
+    const fetchMock = stubRelay((body) => audio(String(body.engine), String(body.voice)));
+    const tts = createTts(kokoro());
+    const error = await rejection(tts.synthesize({ engine: "kokoro", text: "Hi", voice: "my-voice" }));
+    expect(error.kind).toBe("unknown-voice");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("browser kokoro refuses server-only fields", () => {
+    for (const extra of [{ apiKey: "sk-secret" }, { baseUrl: "http://127.0.0.1:8880" }, { catalog: [] }]) {
+      const field = Object.keys(extra)[0]!;
+      expect(() => createTts(kokoro(extra))).toThrow(RangeError);
+      expect(() => createTts(kokoro(extra))).toThrow(new RegExp(`^kokoro runs in the browser through the relay: ${field} stays on the server$`));
+    }
+  });
+
+  it("browser kokoro waits 35 s for the relay's first byte by default", async () => {
+    vi.useFakeTimers();
+    try {
+      // `slow` answers after 30 s (past the Node default); `silent` never answers.
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          (_url: string | URL | Request, init?: RequestInit) =>
+            new Promise<Response>((resolve, reject) => {
+              const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+              if (body.text === "slow") setTimeout(() => resolve(audio("kokoro", String(body.voice))), 30000);
+              init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+            }),
+        ),
+      );
+      const settle = (text: string) => {
+        const state: { done?: boolean; error?: unknown } = {};
+        createKokoroRelayEngine({ relayUrl: RELAY })
+          .synthesize(text, "af_heart", new AbortController().signal)
+          .then(
+            () => {
+              state.done = true;
+            },
+            (e: unknown) => {
+              state.error = e;
+            },
+          );
+        return state;
+      };
+      const slow = settle("slow");
+      const silent = settle("silent");
+      await vi.advanceTimersByTimeAsync(30000);
+      expect(slow.error).toBeUndefined();
+      expect(slow.done).toBe(true);
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(silent.error).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(silent.error).toBeInstanceOf(TtsError);
+      expect((silent.error as TtsError).kind).toBe("first-byte-timeout");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

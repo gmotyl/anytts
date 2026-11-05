@@ -156,9 +156,10 @@ listEngines();
 //   { id: "speechify", label: "Speechify", runtimes: ["node"] },
 //   { id: "azure", label: "Azure Speech (F0)", runtimes: ["node"] },
 //   { id: "openai", label: "OpenAI-compatible (custom server)", runtimes: ["node"] },
+//   { id: "kokoro", label: "Kokoro (local server)", runtimes: ["node"] },
 //   { id: "cascade", label: "Cascade (first engine that answers)", runtimes: ["browser", "node"] },
 // ]
-listVoices("edge"); // [{ id, label, locale, gender, multilingual }, …]; [] for an unknown engine, "cascade" or "openai" (its voices are the app's `catalog`)
+listVoices("edge"); // [{ id, label, locale, gender, multilingual }, …]; [] for an unknown engine, "cascade" or "openai" (its voices are the app's `catalog`); "kokoro" lists its 54 built-in voices
 
 const saved = loadSettings(); // e.g. { engine: "edge", voice: "pl-PL-MarekNeural" }
 const { voice, fellBack } = resolveVoice(tts, { engine: saved.engine, voice: saved.voice, lang: "pl" });
@@ -296,7 +297,8 @@ result with the map and an ElevenLabs result without it never collide.
 `openai` speaks to one server you run that implements OpenAI's `POST /v1/audio/speech`:
 OmniVoice (k2-fsa) behind `omnivoice-server`, Kokoro-FastAPI,
 openedai-speech, or OpenAI itself. The library ships no voice list for it: the app passes the
-server's voices as `catalog`, and every voice check uses that list.
+server's voices as `catalog`, and every voice check uses that list. For Kokoro-FastAPI, the
+[`kokoro`](#kokoro-kokoro) preset ships the catalog for you.
 
 | option          | meaning                                                                                                                                                                             |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -371,6 +373,66 @@ Notes:
   refused connection or 5xx is `network`, 401 `unauthorized`, 429 `rate-limited`, any other 4xx
   `rejected`; there is no quota.
 - One server per `Tts`: the id is fixed to `openai`.
+
+## Kokoro: `kokoro`
+
+`kokoro` is the `openai` engine preset for [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI)
+(Kokoro-82M), usually on `:8880`: `POST {baseUrl}/v1/audio/speech` with `model: "kokoro"`. The
+library ships Kokoro's 54 built-in voices, so there is no `catalog` to pass, and
+`listVoices("kokoro")` works with the server down.
+
+| option        | meaning                                                                                                              |
+| ------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `baseUrl`     | **Required.** Server root, e.g. `http://127.0.0.1:8880`; the engine appends `/v1/audio/speech`.                      |
+| `apiKey`      | Sent as `Authorization: Bearer` only when set. A local server needs none.                                            |
+| `firstByteMs` | Wait for the response headers. Default 30000 in Node (covers a cold model load); 35000 for the browser relay client. |
+| `stallMs`     | Gap between body chunks. Default 8000.                                                                               |
+| `fetch`       | A `fetch` to use instead of the global one.                                                                          |
+
+It also takes the shared engine fields `voices`, `maxConcurrent`, `retries` and `pronunciation`.
+`catalog`, `model`, `languageField` and `extraBody` are set by the engine and throw `RangeError`.
+
+```ts
+// Node: Kokoro-FastAPI on the dev box
+import { createTts } from "anytts/server";
+
+const tts = createTts({
+  engines: { kokoro: { baseUrl: "http://127.0.0.1:8880" } }, // voices default to { default: "af_heart" }
+  defaultEngine: "kokoro",
+  scheduler: { concurrency: 2, tiers: [{ name: "play" }] },
+});
+
+await tts.synthesize({ text: "Good morning." });
+```
+
+The direct engine is registered only by `anytts/server`; in the browser `kokoro` is a relay client
+that takes `{ relayUrl, firstByteMs?, stallMs? }` (`firstByteMs` default 35000; the Node engine
+waits 30000) and checks voices against the same built-in catalog. `baseUrl`, `apiKey` and
+`catalog` in the browser throw `RangeError`, since those stay on the server. The relay's
+server-side `tts` must configure `kokoro` (see [Relay protocol](#relay-protocol)):
+
+```ts
+import { createTts } from "anytts";
+
+const browserTts = createTts({
+  engines: { kokoro: { relayUrl: "/api/tts" } },
+  defaultEngine: "kokoro",
+  scheduler: { concurrency: 2, tiers: [{ name: "play" }] },
+});
+```
+
+Notes:
+
+- **Default voice `af_heart`** (American English, female). Voices span en-US, en-GB, es-ES, fr-FR,
+  hi-IN, it-IT, ja-JP, pt-BR and zh-CN; none is multilingual.
+- **No Polish phonemizer.** Kokoro has no Polish voice, and the request language is never sent:
+  every language is read by the configured voice with that voice's own phonemizer, so a Polish
+  sentence on `af_heart` comes out with English pronunciation.
+- **No word boundaries.** The server returns the whole clip with no timings.
+- **`maxConcurrent` defaults to 1 (Node engine)**: one request at a time to the local model. Set it
+  if your server handles more.
+- **Not keyed**, like `openai`: no `apiKey` is fine, and errors map the same way (`network`,
+  `unauthorized`, `rate-limited`, `rejected`).
 
 ## Cascade
 

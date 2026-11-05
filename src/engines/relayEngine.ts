@@ -6,6 +6,7 @@ import { TtsError, type TtsErrorKind } from "../errors.js";
 import { AZURE_VOICE_MAP, AZURE_VOICES } from "./azure/voices.js";
 import { CARTESIA_VOICE_MAP, CARTESIA_VOICES } from "./cartesia/voices.js";
 import { ELEVENLABS_VOICE_MAP, ELEVENLABS_VOICES } from "./elevenlabs/voices.js";
+import { KOKORO_DEFAULT_VOICE, KOKORO_VOICES } from "./kokoro/voices.js";
 import { SPEECHIFY_VOICE_MAP, SPEECHIFY_VOICES } from "./speechify/voices.js";
 
 export interface RelayFetchOptions {
@@ -20,7 +21,7 @@ export interface RelayFetchOptions {
 export interface RelayEngineOptions {
   /** The relay endpoint (`createRelayHandler` from `anytts/server`). */
   relayUrl: string;
-  /** Max wait for the relay's response headers. Default 8000 (20000 for `cascade` and `openai`). */
+  /** Max wait for the relay's response headers. Default 8000 (20000 for `cascade` and `openai`, 35000 for `kokoro`). */
   firstByteMs?: number;
   /** Max gap between body chunks. Default 8000. */
   stallMs?: number;
@@ -55,6 +56,8 @@ const DEFAULT_CASCADE_FIRST_BYTE_MS = 20000;
  * generated, and the Node engine itself waits 15000 ms, so the browser must outlast it.
  */
 const DEFAULT_OPENAI_FIRST_BYTE_MS = 20000;
+/** Same reasoning for `kokoro`: its Node engine waits 30000 ms (a cold model load). */
+const DEFAULT_KOKORO_FIRST_BYTE_MS = 35000;
 
 const abortError = () => new DOMException("The operation was aborted.", "AbortError");
 
@@ -228,9 +231,7 @@ const OPENAI_SERVER_FIELDS = ["apiKey", "baseUrl", "extraBody"] as const;
  */
 export function createOpenAIRelayEngine(options: OpenAIRelayEngineOptions): Engine {
   const raw = options as unknown as Record<string, unknown>;
-  for (const field of OPENAI_SERVER_FIELDS) {
-    if (raw[field] !== undefined) throw new RangeError(`openai runs in the browser through the relay: ${field} stays on the server`);
-  }
+  refuseServerFields("openai", raw, OPENAI_SERVER_FIELDS);
   const { catalog } = options;
   if (!Array.isArray(catalog) || catalog.length === 0) throw new RangeError("openai: catalog must be non-empty");
   const ids = new Set<string>();
@@ -238,25 +239,50 @@ export function createOpenAIRelayEngine(options: OpenAIRelayEngineOptions): Engi
     if (ids.has(voice.id)) throw new RangeError(`openai: duplicate catalog voice id: ${voice.id}`);
     ids.add(voice.id);
   }
-  const fetchOpts = fetchOptions("openai", raw, DEFAULT_OPENAI_FIRST_BYTE_MS);
+  return catalogRelayEngine("openai", catalog, catalog[0]!.id, fetchOptions("openai", raw, DEFAULT_OPENAI_FIRST_BYTE_MS));
+}
+
+/** Refuses server-only fields rather than ignoring them, so none of them reaches the browser. */
+function refuseServerFields(id: string, raw: Record<string, unknown>, fields: readonly string[]): void {
+  for (const field of fields) {
+    if (raw[field] !== undefined) throw new RangeError(`${id} runs in the browser through the relay: ${field} stays on the server`);
+  }
+}
+
+/** A relay client whose voices are a fixed catalog; the voice map may name only catalog voices. */
+function catalogRelayEngine(id: string, catalog: readonly VoiceInfo[], defaultVoice: string, fetchOpts: RelayFetchOptions): Engine {
   return {
-    id: "openai",
+    id,
     voices: catalog,
     strictVoiceMap: true,
-    defaults: { voices: { default: catalog[0]!.id } },
+    defaults: { voices: { default: defaultVoice } },
     async synthesize(text, voice, signal, hooks, lang) {
-      const body = { engine: "openai", text, voice, ...(lang !== undefined ? { lang } : {}) };
+      const body = { engine: id, text, voice, ...(lang !== undefined ? { lang } : {}) };
       return (await relayFetch(fetchOpts, body, signal, hooks)).bytes;
     },
   };
 }
 
-/** The relay clients the main entry registers for the keyed engine ids and `openai`. */
+/** The browser `kokoro` client: the relay options only; its voices are the static Kokoro catalog. */
+export interface KokoroRelayEngineOptions extends RelayEngineOptions {
+  baseUrl?: never;
+  catalog?: never;
+}
+
+/** `kokoro` as a relay client: `POST { engine: "kokoro", text, voice, lang? }`. */
+export function createKokoroRelayEngine(options: KokoroRelayEngineOptions): Engine {
+  const raw = options as unknown as Record<string, unknown>;
+  refuseServerFields("kokoro", raw, ["apiKey", "baseUrl", "catalog"]);
+  return catalogRelayEngine("kokoro", KOKORO_VOICES, KOKORO_DEFAULT_VOICE, fetchOptions("kokoro", raw, DEFAULT_KOKORO_FIRST_BYTE_MS));
+}
+
+/** The relay clients the main entry registers for the keyed engine ids, `openai` and `kokoro`. */
 export const RELAY_ENGINES: Record<string, (options: Record<string, unknown>) => Engine> = {
   ...Object.fromEntries(
     Object.keys(CATALOGS).map((id) => [id, (options: Record<string, unknown>) => createRelayEngine(id, options as unknown as RelayEngineOptions)]),
   ),
   openai: (options) => createOpenAIRelayEngine(options as unknown as OpenAIRelayEngineOptions),
+  kokoro: (options) => createKokoroRelayEngine(options as unknown as KokoroRelayEngineOptions),
 };
 
 /** A browser cascade request body; the relay walks the chain. */

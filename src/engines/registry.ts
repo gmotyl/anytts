@@ -3,6 +3,7 @@ import { AZURE_VOICES } from "./azure/voices.js";
 import { CARTESIA_VOICES } from "./cartesia/voices.js";
 import { EDGE_VOICES } from "./edge/voices.js";
 import { ELEVENLABS_VOICES } from "./elevenlabs/voices.js";
+import { KOKORO_VOICES } from "./kokoro/voices.js";
 import { SPEECHIFY_VOICES } from "./speechify/voices.js";
 
 export type { VoiceInfo };
@@ -24,6 +25,8 @@ const ENGINES: readonly { info: EngineInfo; voices: readonly VoiceInfo[] }[] = [
   { info: { id: "azure", label: "Azure Speech (F0)", runtimes: ["node"] }, voices: AZURE_VOICES },
   // A user-run server: its voices depend on the model, so apps keep their own catalog.
   { info: { id: "openai", label: "OpenAI-compatible (custom server)", runtimes: ["node"] }, voices: [] },
+  // A user-run server with a fixed model, so its presets are static.
+  { info: { id: "kokoro", label: "Kokoro (local server)", runtimes: ["node"] }, voices: KOKORO_VOICES },
   // The chain over the other engines: no voices of its own.
   { info: { id: "cascade", label: "Cascade (first engine that answers)", runtimes: ["browser", "node"] }, voices: [] },
 ];
