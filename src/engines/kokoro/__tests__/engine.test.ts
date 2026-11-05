@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEdgeEngine } from "../../edge/engine.js";
+import { createKokoroEngine } from "../engine.js";
+import { TtsError } from "../../../errors.js";
 import { EDGE_VOICE_MAP } from "../../edge/voices.js";
 import type { TtsConfig } from "../../../tts.js";
 import { createTts } from "../../../server/index.js";
@@ -93,6 +95,8 @@ describe("kokoro engine", () => {
     ];
     for (const option of owned) {
       expect(() => kokoroTts({ fetch: okFetch(), ...option })).toThrow(RangeError);
+      const [key] = Object.keys(option);
+      expect(() => kokoroTts({ fetch: okFetch(), ...option })).toThrow(`kokoro: ${key} is set by the engine`);
     }
   });
 
@@ -166,5 +170,54 @@ describe("kokoro engine", () => {
     await pending;
     expect(settled).toMatchObject({ engine: "kokoro", voice: "af_heart" });
     expect(slow).toHaveBeenCalledTimes(1);
+  });
+
+  it("kokoro runs one request at a time by default", async () => {
+    // A local model serves one request at a time; the scheduler alone would allow 4.
+    const release: (() => void)[] = [];
+    const fetch = vi.fn(
+      (_url: string | URL | Request, _init?: RequestInit) =>
+        new Promise<Response>((resolve) => release.push(() => resolve(audio()))),
+    );
+    const tts = kokoroTts({ fetch });
+
+    const first = tts.synthesize({ text: "One" });
+    const second = tts.synthesize({ text: "Two" });
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    release[0]!();
+    await first;
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    release[1]!();
+    await second;
+    expect(createKokoroEngine({ baseUrl }).defaults.maxConcurrent).toBe(1);
+  });
+
+  it("kokoro passes stallMs through", async () => {
+    vi.useFakeTimers();
+    // Headers and one chunk arrive, then the body goes silent.
+    const silentAfterFirstChunk = (_url: string | URL | Request, init?: RequestInit) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1]));
+          init?.signal?.addEventListener("abort", () => controller.error(new DOMException("aborted", "AbortError")));
+        },
+      });
+      return Promise.resolve(new Response(body, { status: 200, headers: { "content-type": "audio/mpeg" } }));
+    };
+    const engine = createKokoroEngine({ baseUrl, stallMs: 100, fetch: silentAfterFirstChunk });
+    let settled: unknown;
+    const pending = engine
+      .synthesize("Hello", "af_heart", new AbortController().signal)
+      .catch((e: unknown) => (settled = e));
+    await vi.advanceTimersByTimeAsync(99);
+    expect(settled).toBeUndefined();
+    // Well before keyedFetch's 8000 default.
+    await vi.advanceTimersByTimeAsync(1);
+    await pending;
+    expect(settled).toBeInstanceOf(TtsError);
+    expect((settled as TtsError).kind).toBe("stalled");
   });
 });
