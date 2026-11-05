@@ -3,6 +3,7 @@ import { createEdgeEngine } from "../edge/engine.js";
 import { AZURE_VOICES } from "../azure/voices.js";
 import { CARTESIA_VOICES } from "../cartesia/voices.js";
 import { ELEVENLABS_VOICES } from "../elevenlabs/voices.js";
+import { KOKORO_VOICES } from "../kokoro/voices.js";
 import { listEngines, listVoices } from "../registry.js";
 import { SPEECHIFY_VOICES } from "../speechify/voices.js";
 
@@ -39,7 +40,7 @@ const PAVILIO_VOICES = [
 describe("registry", () => {
   it("lists keyed engines and cascade with runtimes", () => {
     const engines = listEngines();
-    expect(engines.map((engine) => engine.id)).toEqual(["edge", "elevenlabs", "cartesia", "speechify", "azure", "openai", "cascade"]);
+    expect(engines.map((engine) => engine.id)).toEqual(["edge", "elevenlabs", "cartesia", "speechify", "azure", "openai", "kokoro", "cascade"]);
     const runtimes = Object.fromEntries(engines.map((engine) => [engine.id, [...engine.runtimes].sort()]));
     expect(runtimes).toEqual({
       edge: ["browser", "node"],
@@ -48,6 +49,7 @@ describe("registry", () => {
       speechify: ["node"],
       azure: ["node"],
       openai: ["node"],
+      kokoro: ["node"],
       cascade: ["browser", "node"],
     });
     for (const engine of engines) expect(engine.label).toBeTruthy();
@@ -124,6 +126,26 @@ describe("registry", () => {
 
   it("listVoices returns no static voices for openai", () => {
     expect(listVoices("openai")).toEqual([]);
+  });
+
+  it("listEngines includes kokoro as a node engine", () => {
+    expect(listEngines()).toContainEqual({ id: "kokoro", label: "Kokoro (local server)", runtimes: ["node"] });
+  });
+
+  it("listVoices(kokoro) returns the static catalog", () => {
+    const voices = listVoices("kokoro");
+    expect(voices).toHaveLength(54);
+    expect(voices).toEqual(KOKORO_VOICES);
+  });
+
+  it("listVoices(kokoro) returns copies", () => {
+    const voices = listVoices("kokoro");
+    const id = voices[0]!.id;
+    voices[0]!.id = "mutated";
+    voices.pop();
+    expect(listVoices("kokoro")).toHaveLength(54);
+    expect(listVoices("kokoro")[0]!.id).toBe(id);
+    expect(KOKORO_VOICES[0]!.id).toBe(id);
   });
 
   it("unknown engine has no voices", () => {

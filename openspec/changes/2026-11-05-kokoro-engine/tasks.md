@@ -101,9 +101,9 @@ export interface KokoroEngineOptions {
 - "listVoices(kokoro) returns the static catalog"
 - "listVoices(kokoro) returns copies"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/__tests__/registry.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/engines && git commit -m "feat(kokoro): list engine and voices"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/__tests__/registry.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/engines && git commit -m "feat(kokoro): list engine and voices"`
 
 ### Task 4: Browser relay client for `kokoro`
 
