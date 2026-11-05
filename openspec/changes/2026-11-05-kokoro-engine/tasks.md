@@ -39,9 +39,9 @@ export const KOKORO_DEFAULT_VOICE = "af_heart";
 - "every kokoro voice's locale and gender follow its id prefix"
 - "af_heart is an en-US female voice labelled Heart"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/kokoro` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: `pnpm vitest run src/engines/kokoro && pnpm lint` — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/engines/kokoro && git commit -m "feat(kokoro): static voice catalog"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/kokoro` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: `pnpm vitest run src/engines/kokoro && pnpm lint` — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/engines/kokoro && git commit -m "feat(kokoro): static voice catalog"`
 
 ### Task 2: The `kokoro` engine factory, registered in `anytts/server`
 
