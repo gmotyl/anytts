@@ -81,9 +81,9 @@ export interface KokoroEngineOptions {
 - "kokoro down falls through in a cascade and is not no-key"
 - "kokoro waits 30 s for the first byte by default"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/kokoro` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/engines/kokoro src/server/index.ts && git commit -m "feat(kokoro): engine factory on the openai engine"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/kokoro` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/engines/kokoro src/server/index.ts && git commit -m "feat(kokoro): engine factory on the openai engine"`
 
 ### Task 3: Registry entry
 
