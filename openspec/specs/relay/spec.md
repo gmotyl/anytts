@@ -116,9 +116,10 @@ The `edge` engine accepts `relayUrl` and `mode: "auto" | "direct" | "relay"`; th
 - **THEN** both use the same cache key and report `engine: "edge"`
 
 ### Requirement: Keyed engines and the cascade are relay clients in the browser
-In the browser, `cascade`, every keyed engine and `openai` are relay clients that take
+In the browser, `cascade`, every keyed engine, `openai` and `kokoro` are relay clients that take
 `{ relayUrl, firstByteMs?, stallMs? }`. `openai` also requires `catalog: VoiceInfo[]`, and its
-voice checks use that list. They POST the request to the relay and report the engine and voice
+voice checks use that list. `kokoro` takes no `catalog`; its voice checks use the static Kokoro
+catalog. They POST the request to the relay and report the engine and voice
 from the response headers. A direct request sends `lang` when the request has one.
 
 #### Scenario: A browser openai request
@@ -135,6 +136,18 @@ from the response headers. A direct request sends `lang` when the request has on
 
 #### Scenario: Server-only openai fields stay out of the browser
 - **WHEN** a browser instance configures `openai` with `apiKey`, `baseUrl` or `extraBody`
+- **THEN** `createTts` throws `RangeError`
+
+#### Scenario: A browser kokoro request
+- **WHEN** a browser instance with `engines: { kokoro: { relayUrl: "/api/tts" } }` synthesizes `{ engine: "kokoro", text, voice: "af_heart", lang: "pl" }`
+- **THEN** `/api/tts` receives `{ engine: "kokoro", text, voice: "af_heart", lang: "pl" }`
+
+#### Scenario: A browser kokoro voice outside the catalog
+- **WHEN** the same instance synthesizes `{ engine: "kokoro", text, voice: "my-voice" }`
+- **THEN** it rejects `unknown-voice` without calling the relay
+
+#### Scenario: Server-only kokoro fields stay out of the browser
+- **WHEN** a browser instance configures `kokoro` with `baseUrl`, `apiKey` or `catalog`
 - **THEN** `createTts` throws `RangeError`
 
 #### Scenario: A browser cascade request
