@@ -122,9 +122,9 @@ export interface KokoroEngineOptions {
 - "browser kokoro rejects a voice outside the static catalog"
 - "browser kokoro refuses server-only fields"
 
-- [ ] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/__tests__/relayEngine.test.ts` — Expected: FAIL
-- [ ] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
-- [ ] **Step 3: Commit** — `git add src/engines && git commit -m "feat(kokoro): browser relay client"`
+- [x] **Step 1: Write the failing tests** — Run: `pnpm vitest run src/engines/__tests__/relayEngine.test.ts` — Expected: FAIL
+- [x] **Step 2: Minimal implementation** — Run: `pnpm test && pnpm lint` — Expected: PASS
+- [x] **Step 3: Commit** — `git add src/engines && git commit -m "feat(kokoro): browser relay client"`
 
 ### Task 5: Docs, live smoke, version and PR
 

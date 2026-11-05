@@ -306,6 +306,41 @@ describe("browser openai relay client", () => {
   });
 });
 
+describe("browser kokoro relay client", () => {
+  const kokoro = (extra: Record<string, unknown> = {}): TtsConfig => ({
+    engines: { kokoro: { relayUrl: "/api/tts", ...extra } },
+    defaultEngine: "kokoro",
+    scheduler,
+  });
+
+  it("browser kokoro request reaches the relay with its language", async () => {
+    const fetchMock = stubRelay((body) => audio(String(body.engine), String(body.voice)));
+    const tts = createTts(kokoro());
+    const result = await tts.synthesize({ engine: "kokoro", text: "Cześć", voice: "af_heart", lang: "pl" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("/api/tts");
+    expect(JSON.parse(String(init?.body))).toEqual({ engine: "kokoro", text: "Cześć", voice: "af_heart", lang: "pl" });
+    expect(result).toMatchObject({ engine: "kokoro", voice: "af_heart" });
+  });
+
+  it("browser kokoro rejects a voice outside the static catalog", async () => {
+    const fetchMock = stubRelay((body) => audio(String(body.engine), String(body.voice)));
+    const tts = createTts(kokoro());
+    const error = await rejection(tts.synthesize({ engine: "kokoro", text: "Hi", voice: "my-voice" }));
+    expect(error.kind).toBe("unknown-voice");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("browser kokoro refuses server-only fields", () => {
+    for (const extra of [{ apiKey: "sk-secret" }, { baseUrl: "http://127.0.0.1:8880" }, { catalog: [] }]) {
+      const field = Object.keys(extra)[0]!;
+      expect(() => createTts(kokoro(extra))).toThrow(RangeError);
+      expect(() => createTts(kokoro(extra))).toThrow(new RegExp(`^kokoro runs in the browser through the relay: ${field} stays on the server$`));
+    }
+  });
+});
+
 describe("relay client", () => {
   it("sends lang on a direct keyed request when the request has one", async () => {
     const fetchMock = stubRelay((body) => audio(String(body.engine), String(body.voice)));
