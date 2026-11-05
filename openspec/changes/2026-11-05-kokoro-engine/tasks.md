@@ -138,5 +138,5 @@ script against a running Kokoro-FastAPI: `createTts` from `dist/server` with `ko
 and two non-empty MP3s whose first bytes are `ID3` or `0xFFFB`.
 
 - [x] **Step 1: README + version bump** — Run: `pnpm build && pnpm test && pnpm lint` — Expected: PASS
-- [ ] **Step 2: Live smoke against Kokoro-FastAPI** (any local install, e.g. pavilio's `kokoroctl start` once its Task 6 lands, or `docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu`) — Expected: MP3 bytes
+- [x] **Step 2: Live smoke against Kokoro-FastAPI** (any local install, e.g. pavilio's `kokoroctl start` once its Task 6 lands, or `docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu`) — Expected: MP3 bytes
 - [x] **Step 3: Commit, push and open the PR to `main`** — `git commit -am "docs: kokoro engine; 0.7.0" && git push -u origin feat/kokoro-engine && GH_TOKEN="" gh pr create --base main` — then the release tag after merge (`v0.7.0` stages to npm; Greg approves with 2FA)
