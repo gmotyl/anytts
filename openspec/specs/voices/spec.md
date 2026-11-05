@@ -7,7 +7,8 @@ Engine and voice catalogs for settings UIs, and voice ownership.
 
 #### Scenario: Engine list
 - **WHEN** `listEngines()` is called
-- **THEN** it returns exactly one entry with `id: "edge"` and `runtimes` containing `"browser"` and `"node"`
+- **THEN** it returns `edge`, `elevenlabs`, `cartesia`, `speechify`, `azure`, `openai`, `kokoro` and `cascade`, in that order
+- **AND** `edge` lists `runtimes` containing `"browser"` and `"node"`
 
 ### Requirement: Voices are listed per engine
 `listVoices(engineId)` returns that engine's static, curated catalog as

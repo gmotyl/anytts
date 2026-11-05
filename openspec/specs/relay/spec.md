@@ -70,8 +70,6 @@ a `TtsConfig` or a shared `Tts` instance. `authorize` stays optional for every c
 - **WHEN** `POST { engine: "speechify", text, voice, lang: 1 }` arrives
 - **THEN** the response is `400` and no synthesis starts
 
-## ADDED Requirements
-
 ### Requirement: The Relay handler mounts in Node HTTP servers
 `toNodeHandler(handler)` adapts the Fetch handler to `(req, res)` for Express and `node:http`.
 
