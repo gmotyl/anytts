@@ -116,9 +116,26 @@ The `edge` engine accepts `relayUrl` and `mode: "auto" | "direct" | "relay"`; th
 - **THEN** both use the same cache key and report `engine: "edge"`
 
 ### Requirement: Keyed engines and the cascade are relay clients in the browser
-In the browser, `cascade` and every keyed engine take only `{ relayUrl, firstByteMs? }`, POST the
-request to the relay and report the engine and voice from the response headers. A direct keyed-engine request sends
-`lang` when the request has one.
+In the browser, `cascade`, every keyed engine and `openai` are relay clients that take
+`{ relayUrl, firstByteMs?, stallMs? }`. `openai` also requires `catalog: VoiceInfo[]`, and its
+voice checks use that list. They POST the request to the relay and report the engine and voice
+from the response headers. A direct request sends `lang` when the request has one.
+
+#### Scenario: A browser openai request
+- **WHEN** a browser instance with `engines: { openai: { relayUrl: "/api/tts", catalog: [pl-female] } }` synthesizes `{ engine: "openai", text, voice: "pl-female", lang: "pl" }`
+- **THEN** `/api/tts` receives `{ engine: "openai", text, voice: "pl-female", lang: "pl" }`
+
+#### Scenario: A browser openai voice outside the catalog
+- **WHEN** the same instance synthesizes `{ engine: "openai", text, voice: "en-male" }`
+- **THEN** it rejects `unknown-voice` without calling the relay
+
+#### Scenario: A browser openai client needs its catalog
+- **WHEN** a browser instance configures `openai: { relayUrl: "/api/tts" }` without `catalog`
+- **THEN** `createTts` throws `RangeError`
+
+#### Scenario: Server-only openai fields stay out of the browser
+- **WHEN** a browser instance configures `openai` with `apiKey`, `baseUrl` or `extraBody`
+- **THEN** `createTts` throws `RangeError`
 
 #### Scenario: A browser cascade request
 - **WHEN** a browser instance with `engines: { cascade: { relayUrl: "/api/tts" } }` synthesizes

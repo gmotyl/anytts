@@ -59,3 +59,16 @@ with `multilingual: false`, its locale and gender.
 #### Scenario: Nothing usable saved
 - **WHEN** no voice is saved and no `lang` is given
 - **THEN** the engine's `default` voice is returned with `fellBack: false`
+
+### Requirement: The openai engine is listed with no static voices
+`listEngines()` includes `{ id: "openai", label: "OpenAI-compatible (custom server)", runtimes: ["node"] }`.
+`listVoices("openai")` returns `[]`, because the app supplies that engine's voices in its config
+`catalog`.
+
+#### Scenario: Engine list includes openai
+- **WHEN** `listEngines()` is called
+- **THEN** it contains an entry with `id: "openai"` and `runtimes` equal to `["node"]`
+
+#### Scenario: No static openai voices
+- **WHEN** `listVoices("openai")` is called
+- **THEN** it returns an empty list
