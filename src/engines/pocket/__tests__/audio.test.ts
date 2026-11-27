@@ -35,6 +35,10 @@ describe("pcmFromWav", () => {
     expect([...pcmFromWav(wav).samples]).toEqual([1, -2, 3]);
   });
 
+  it("pcmFromWav rejects a data chunk with less than one sample", () => {
+    noAudio(() => pcmFromWav(buildWav(new Uint8Array(1))));
+  });
+
   it("rejects an empty or non-WAV body as no-audio", () => {
     noAudio(() => pcmFromWav(buildWav(new Uint8Array(0))));
     noAudio(() => pcmFromWav(new TextEncoder().encode("not a wav file at all, sorry").buffer));
