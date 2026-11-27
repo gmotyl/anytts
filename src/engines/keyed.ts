@@ -36,12 +36,15 @@ export interface RefusalRules {
   isQuota(refusal: Refusal): boolean;
   /** The refusal means the key is missing, invalid or revoked. Default: status 401. */
   isUnauthorized?(refusal: Refusal): boolean;
+  /** Engine-specific verdict checked before the shared rules; `undefined` falls through to them. */
+  classify?(refusal: Refusal, message: string): TtsError | undefined;
 }
 
 export interface KeyedRequest {
   url: string;
   headers: Record<string, string>;
-  body: string;
+  /** A string, or `FormData` (the runtime then sets the multipart content type itself). */
+  body: string | FormData;
 }
 
 const abortError = () => new DOMException("The operation was aborted.", "AbortError");
@@ -91,6 +94,8 @@ export async function refusalError(engineId: string, response: Response, rules: 
   const refusal: Refusal = { status: response.status, body: await readBody(response) };
   const { status } = refusal;
   const message = `${engineId} answered ${status}`;
+  const classified = rules.classify?.(refusal, message);
+  if (classified) return classified;
   if (rules.isQuota(refusal)) return new TtsError("quota-exhausted", message, { status });
   if ((rules.isUnauthorized ?? ((r: Refusal) => r.status === 401))(refusal)) {
     return new TtsError("unauthorized", message, { status });
