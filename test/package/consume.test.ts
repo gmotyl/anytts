@@ -26,7 +26,7 @@ it("packed package imports in node 22", () => {
 
   // The only runtime dependency that comes along is the lazily loaded MP3 encoder.
   const installed = readdirSync(join(dir, "node_modules")).filter((n) => !n.startsWith("."));
-  expect(installed).toEqual(["@breezystack", "anytts"]);
+  expect([...installed].sort()).toEqual(["@breezystack", "anytts"]);
   expect(readdirSync(join(dir, "node_modules", "@breezystack"))).toEqual(["lamejs"]);
 
   writeFileSync(
