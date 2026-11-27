@@ -1,6 +1,6 @@
 {
   "name": "anytts",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Text-to-speech for the browser and Node with pluggable engines — starting with the free Edge read-aloud service.",
   "type": "module",
   "license": "MIT",
@@ -45,5 +45,8 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
     "vitest": "^5.0.4"
+  },
+  "dependencies": {
+    "@breezystack/lamejs": "1.2.7"
   }
 }

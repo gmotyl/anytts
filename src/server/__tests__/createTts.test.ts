@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { AZURE_VOICE_MAP } from "../../engines/azure/voices.js";
+import { createPocketEngine, type PocketEngineOptions } from "../../engines/pocket/engine.js";
 import { createEdgeEngine } from "../../engines/edge/engine.js";
 import { EDGE_VOICE_MAP } from "../../engines/edge/voices.js";
 import { createTts as createMainTts, type TtsConfig } from "../../tts.js";
 import type { VoiceInfo } from "../../engine.js";
 import { resolveVoice } from "../../voices.js";
-import { createTts } from "../index.js";
+import { createRelayHandler, createTts } from "../index.js";
 
 const scheduler: TtsConfig["scheduler"] = { concurrency: 4, tiers: [{ name: "play" }] };
 
@@ -179,5 +180,135 @@ describe("anytts/server createTts with openai", () => {
     expect(calls).toHaveLength(2);
     calls[1]!.answer();
     await expect(second).resolves.toMatchObject({ engine: "openai" });
+  });
+});
+
+describe("anytts/server createTts with pocket", () => {
+  const wav = (): Response => {
+    const pcm = new Uint8Array(3200);
+    const buf = new ArrayBuffer(44 + pcm.length);
+    const v = new DataView(buf);
+    const tag = (o: number, t: string) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    tag(0, "RIFF");
+    v.setUint32(4, 36 + pcm.length, true);
+    tag(8, "WAVE");
+    tag(12, "fmt ");
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true);
+    v.setUint32(24, 24000, true);
+    v.setUint32(28, 48000, true);
+    v.setUint16(32, 2, true);
+    v.setUint16(34, 16, true);
+    tag(36, "data");
+    v.setUint32(40, pcm.length, true);
+    new Uint8Array(buf).set(pcm, 44);
+    return new Response(buf, { status: 200, headers: { "content-type": "audio/wav" } });
+  };
+
+  it("node createTts builds pocket engines", async () => {
+    const fetch = vi.fn(async () => wav());
+    const tts = createTts({
+      engines: { pocket: { baseUrl: "http://127.0.0.1:8890", fetch }, "pocket-pl": { baseUrl: "http://127.0.0.1:8891", fetch } },
+      defaultEngine: "pocket",
+      scheduler,
+    });
+    await expect(tts.synthesize({ engine: "pocket", text: "Hello", voice: "alba" })).resolves.toMatchObject({ engine: "pocket", voice: "alba" });
+    await expect(tts.synthesize({ engine: "pocket-pl", text: "Cześć", voice: "shefowl" })).resolves.toMatchObject({ engine: "pocket-pl", voice: "shefowl" });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  const piotr = { id: "piotr", label: "Piotr", gender: "male" as const, version: 1764245000000 };
+  const pocketPl = (extra: Record<string, unknown>, fetch: typeof globalThis.fetch) =>
+    ({
+      engines: { "pocket-pl": { baseUrl: "http://127.0.0.1:8891", voiceFilesUrl: "http://127.0.0.1:8892", fetch, ...extra } },
+      defaultEngine: "pocket-pl",
+      scheduler,
+    }) as TtsConfig;
+
+  it("createTts hands customVoices to pocket: listed with the engine locale and sent as voice_url", async () => {
+    const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => wav());
+    const tts = createTts(pocketPl({ customVoices: [piotr] }, fetch as typeof globalThis.fetch));
+    expect(resolveVoice(tts, { engine: "pocket-pl", voice: "piotr" })).toEqual({ voice: "piotr", fellBack: false });
+    let seen: VoiceInfo[] = [];
+    createTts(pocketPl({ customVoices: [piotr] }, fetch as typeof globalThis.fetch), {
+      engineFactories: {
+        "pocket-pl": (o) => {
+          const engine = createPocketEngine("pocket-pl", o as unknown as PocketEngineOptions);
+          seen = [...engine.voices];
+          return engine;
+        },
+      },
+    });
+    expect(seen.find((v) => v.id === "piotr")).toMatchObject({ locale: "pl-PL" });
+    await tts.synthesize({ engine: "pocket-pl", text: "Cześć", voice: "piotr" });
+    const body = fetch.mock.calls[0]![1]?.body as FormData;
+    expect(body.get("voice_url")).toBe("http://127.0.0.1:8892/piotr/sample.wav?v=1764245000000");
+  });
+
+  it("a shared voice map may name a custom pocket voice and is used", async () => {
+    const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => wav());
+    const tts = createTts(pocketPl({ customVoices: [piotr], voices: { default: "piotr" } }, fetch as typeof globalThis.fetch));
+    await tts.synthesize({ engine: "pocket-pl", text: "Cześć" });
+    expect((fetch.mock.calls[0]![1]?.body as FormData).get("voice_url")).toBe("http://127.0.0.1:8892/piotr/sample.wav?v=1764245000000");
+    expect(() => createTts(pocketPl({ customVoices: [piotr], voices: { default: "nobody" } }, fetch as typeof globalThis.fetch))).toThrow(RangeError);
+    expect(() => createTts(pocketPl({ voices: { default: "piotr" } }, fetch as typeof globalThis.fetch))).toThrow(RangeError);
+  });
+
+  it("the relay server serves a custom pocket voice configured with customVoices", async () => {
+    const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => wav());
+    const handler = createRelayHandler({ tts: pocketPl({ customVoices: [piotr] }, fetch as typeof globalThis.fetch) });
+    const res = await handler(
+      new Request("http://relay.test/api/tts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ engine: "pocket-pl", text: "Cześć", voice: "piotr" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-anytts-voice")).toBe("piotr");
+    expect((fetch.mock.calls[0]![1]?.body as FormData).get("voice_url")).toBe("http://127.0.0.1:8892/piotr/sample.wav?v=1764245000000");
+  });
+
+  it.each([".", ".."])("createTts rejects the dot-segment custom voice id %j with RangeError", (id) => {
+    const fetch = vi.fn();
+    expect(() => createTts(pocketPl({ customVoices: [{ id, label: "X", version: 1 }] }, fetch as unknown as typeof globalThis.fetch))).toThrow(RangeError);
+  });
+
+  it("customVoices without voiceFilesUrl throws RangeError through createTts", () => {
+    const fetch = vi.fn(async () => wav());
+    expect(() =>
+      createTts({
+        engines: { "pocket-pl": { baseUrl: "http://127.0.0.1:8891", customVoices: [piotr], fetch } },
+        defaultEngine: "pocket-pl",
+        scheduler,
+      }),
+    ).toThrow(/voiceFilesUrl is required/);
+  });
+
+  it("a cascade skips an unconfigured pocket", async () => {
+    const spoken: string[] = [];
+    const tts = createTts(
+      { engines: { edge: {}, cascade: { order: ["edge"] } }, defaultEngine: "cascade", scheduler },
+      {
+        engineFactories: {
+          edge: (options: Record<string, unknown>) => ({
+            ...createEdgeEngine(options),
+            synthesize: async (_text: string, voice: string) => {
+              spoken.push(voice);
+              return new Uint8Array([1]).buffer;
+            },
+          }),
+        },
+      },
+    );
+    await expect(tts.synthesize({ text: "hi", order: ["pocket", "edge"] })).resolves.toMatchObject({ engine: "edge" });
+    expect(spoken).toHaveLength(1);
+  });
+
+  it("a config-level cascade order naming an unconfigured pocket throws RangeError", () => {
+    expect(() => createTts({ engines: { edge: {}, cascade: { order: ["pocket"] } }, defaultEngine: "cascade", scheduler })).toThrow(
+      /not a configured engine: pocket/,
+    );
   });
 });

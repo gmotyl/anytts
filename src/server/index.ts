@@ -5,6 +5,7 @@ import { createCartesiaEngine } from "../engines/cartesia/engine.js";
 import { createElevenLabsEngine } from "../engines/elevenlabs/engine.js";
 import { createKokoroEngine, type KokoroEngineOptions } from "../engines/kokoro/engine.js";
 import { createOpenAIEngine, type OpenAIEngineOptions } from "../engines/openai/engine.js";
+import { createPocketEngine, type PocketEngineOptions } from "../engines/pocket/engine.js";
 import { createSpeechifyEngine } from "../engines/speechify/engine.js";
 import { createTts as createBrowserSafeTts, type CreateTtsInternals, type EngineFactory, type Tts, type TtsConfig } from "../tts.js";
 import { createRelayHandlerWith, type RelayHandlerOptions } from "./relay.js";
@@ -14,10 +15,12 @@ export type { CartesiaEngineOptions } from "../engines/cartesia/engine.js";
 export type { ElevenLabsEngineOptions } from "../engines/elevenlabs/engine.js";
 export type { KokoroEngineOptions } from "../engines/kokoro/engine.js";
 export type { OpenAIEngineOptions } from "../engines/openai/engine.js";
+export type { PocketEngineOptions } from "../engines/pocket/engine.js";
+export type { PocketVoice } from "../engines/pocket/voices.js";
 export type { SpeechifyEngineOptions } from "../engines/speechify/engine.js";
 
 /**
- * Engines only this (Node) entry registers: the keyed ones hold API keys, and `openai` / `kokoro`
+ * Engines only this (Node) entry registers: the keyed ones hold API keys, and `openai` / `kokoro` / `pocket`
  * talk to a server (often local) that a browser should reach through the relay.
  */
 const NODE_ENGINES: Record<string, EngineFactory> = {
@@ -30,11 +33,14 @@ const NODE_ENGINES: Record<string, EngineFactory> = {
   openai: (options) => createOpenAIEngine(options as unknown as OpenAIEngineOptions),
   // Same cast: `baseUrl` is checked (and owned options refused) by the engine.
   kokoro: (options) => createKokoroEngine(options as unknown as KokoroEngineOptions),
+  // Same cast: the engine checks `baseUrl` itself.
+  pocket: (options) => createPocketEngine("pocket", options as unknown as PocketEngineOptions),
+  "pocket-pl": (options) => createPocketEngine("pocket-pl", options as unknown as PocketEngineOptions),
 };
 
 /**
  * `createTts` from `anytts`, plus the keyed engines (`elevenlabs`, `cartesia`, `speechify`, `azure`)
- * and `openai` / `kokoro` (OpenAI-compatible speech servers; their `apiKey` is optional, so the
+ * and `openai` / `kokoro` / `pocket` / `pocket-pl` (speech servers; their `apiKey` is optional, so the
  * cascade never skips them as keyless).
  */
 export function createTts(config: TtsConfig, internals: CreateTtsInternals = {}): Tts {

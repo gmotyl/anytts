@@ -4,6 +4,7 @@ import { AZURE_VOICES } from "../azure/voices.js";
 import { CARTESIA_VOICES } from "../cartesia/voices.js";
 import { ELEVENLABS_VOICES } from "../elevenlabs/voices.js";
 import { KOKORO_VOICES } from "../kokoro/voices.js";
+import { POCKET_PL_PRESETS, POCKET_PRESETS } from "../pocket/voices.js";
 import { listEngines, listVoices } from "../registry.js";
 import { SPEECHIFY_VOICES } from "../speechify/voices.js";
 
@@ -36,7 +37,7 @@ const PAVILIO_VOICES = [
 describe("registry", () => {
   it("lists keyed engines and cascade with runtimes", () => {
     const engines = listEngines();
-    expect(engines.map((engine) => engine.id)).toEqual(["edge", "elevenlabs", "cartesia", "speechify", "azure", "openai", "kokoro", "cascade"]);
+    expect(engines.map((engine) => engine.id)).toEqual(["edge", "elevenlabs", "cartesia", "speechify", "azure", "openai", "kokoro", "pocket", "pocket-pl", "cascade"]);
     const runtimes = Object.fromEntries(engines.map((engine) => [engine.id, [...engine.runtimes].sort()]));
     expect(runtimes).toEqual({
       edge: ["browser", "node"],
@@ -46,6 +47,8 @@ describe("registry", () => {
       azure: ["node"],
       openai: ["node"],
       kokoro: ["node"],
+      pocket: ["node"],
+      "pocket-pl": ["node"],
       cascade: ["browser", "node"],
     });
     for (const engine of engines) expect(engine.label).toBeTruthy();
@@ -122,6 +125,14 @@ describe("registry", () => {
 
   it("listVoices returns no static voices for openai", () => {
     expect(listVoices("openai")).toEqual([]);
+  });
+
+  it("registry lists both pocket engines", () => {
+    expect(listEngines()).toContainEqual({ id: "pocket", label: "Pocket TTS (English)", runtimes: ["node"] });
+    expect(listEngines()).toContainEqual({ id: "pocket-pl", label: "Pocket TTS (Polish)", runtimes: ["node"] });
+    expect(listVoices("pocket")).toHaveLength(27);
+    expect(listVoices("pocket")).toEqual(POCKET_PRESETS);
+    expect(listVoices("pocket-pl")).toEqual(POCKET_PL_PRESETS);
   });
 
   it("listEngines includes kokoro as a node engine", () => {
