@@ -24,9 +24,10 @@ it("packed package imports in node 22", () => {
 
   dir = installPacked(tarball, "node");
 
-  // No runtime dependency comes along.
+  // The only runtime dependency that comes along is the lazily loaded MP3 encoder.
   const installed = readdirSync(join(dir, "node_modules")).filter((n) => !n.startsWith("."));
-  expect(installed).toEqual(["anytts"]);
+  expect(installed).toEqual(["@breezystack", "anytts"]);
+  expect(readdirSync(join(dir, "node_modules", "@breezystack"))).toEqual(["lamejs"]);
 
   writeFileSync(
     join(dir, "check.mjs"),
