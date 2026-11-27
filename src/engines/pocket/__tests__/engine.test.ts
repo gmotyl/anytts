@@ -121,6 +121,40 @@ describe("pocket engine", () => {
     ).rejects.toMatchObject({ kind: "network" });
   });
 
+  it("waits 30 s for the first byte by default", async () => {
+    vi.useFakeTimers();
+    try {
+      // Never answers; rejects only when the engine aborts the request.
+      const hang = vi.fn(
+        (_url: string | URL | Request, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+          }),
+      );
+      const engine = createPocketEngine("pocket", { baseUrl, fetch: hang });
+      const state: { error?: unknown } = {};
+      engine.synthesize("x", "alba", signal()).catch((e: unknown) => {
+        state.error = e;
+      });
+      await vi.advanceTimersByTimeAsync(29999);
+      expect(state.error).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(2);
+      expect(state.error).toMatchObject({ kind: "first-byte-timeout" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sniffs the body for voice-cloning text on a 500 only", async () => {
+    const run = (status: number, body: string) =>
+      createPocketEngine("pocket", { baseUrl, fetch: failFetch(status, body) }).synthesize("x", "alba", signal());
+    // A 4xx that mentions voice cloning is an ordinary refusal, not an unknown voice.
+    await expect(run(422, "voice cloning is unavailable")).rejects.toMatchObject({ kind: "rejected" });
+    await expect(run(400, JSON.stringify({ detail: "Cannot use predefined voices" }))).rejects.toMatchObject({ kind: "rejected" });
+    // A 500 with an unrelated JSON body stays a transient network fault.
+    await expect(run(500, JSON.stringify({ detail: "internal error" }))).rejects.toMatchObject({ kind: "network" });
+  });
+
   it("returns MP3 decoded from the WAV reply", async () => {
     const engine = createPocketEngine("pocket", { baseUrl, fetch: okFetch() });
     const bytes = new Uint8Array(await engine.synthesize("Hello", "alba", signal()));
