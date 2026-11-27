@@ -92,5 +92,5 @@ stall deadlines apply as for every HTTP engine.
 labels them "Pocket TTS (English)" and "Pocket TTS (Polish)".
 
 #### Scenario: Browser config
-- **WHEN** a browser instance is created with `engines: { pocket: { relay: "/api/tts" } }`
+- **WHEN** a browser instance is created with `engines: { pocket: { relayUrl: "/api/tts" } }`
 - **THEN** synthesis POSTs the relay with `engine: "pocket"`, and `listEngines()` labels it "Pocket TTS (English)"

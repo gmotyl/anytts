@@ -4,7 +4,7 @@ Text-to-speech for the browser and Node with pluggable engines — starting with
 
 - Node ≥ 22 and modern browsers
 - ESM-only, TypeScript types included
-- Zero runtime dependencies
+- One runtime dependency, `@breezystack/lamejs`, loaded lazily and only by the `pocket` engines
 
 ```sh
 npm i anytts
@@ -157,9 +157,11 @@ listEngines();
 //   { id: "azure", label: "Azure Speech (F0)", runtimes: ["node"] },
 //   { id: "openai", label: "OpenAI-compatible (custom server)", runtimes: ["node"] },
 //   { id: "kokoro", label: "Kokoro (local server)", runtimes: ["node"] },
+//   { id: "pocket", label: "Pocket TTS (English)", runtimes: ["node"] },
+//   { id: "pocket-pl", label: "Pocket TTS (Polish)", runtimes: ["node"] },
 //   { id: "cascade", label: "Cascade (first engine that answers)", runtimes: ["browser", "node"] },
 // ]
-listVoices("edge"); // [{ id, label, locale, gender, multilingual }, …]; [] for an unknown engine, "cascade" or "openai" (its voices are the app's `catalog`); "kokoro" lists its 54 built-in voices
+listVoices("edge"); // [{ id, label, locale, gender, multilingual }, …]; [] for an unknown engine, "cascade" or "openai" (its voices are the app's `catalog`); "kokoro" lists its 54 built-in voices, "pocket" its 27 presets and "pocket-pl" its one reference voice
 
 const saved = loadSettings(); // e.g. { engine: "edge", voice: "pl-PL-MarekNeural" }
 const { voice, fellBack } = resolveVoice(tts, { engine: saved.engine, voice: saved.voice, lang: "pl" });
@@ -433,6 +435,82 @@ Notes:
   if your server handles more.
 - **Not keyed**, like `openai`: no `apiKey` is fine, and errors map the same way (`network`,
   `unauthorized`, `rate-limited`, `rejected`).
+
+## Pocket TTS: `pocket`, `pocket-pl`
+
+`pocket` (English) and `pocket-pl` (Polish) talk to [pocket-tts](https://github.com/kyutai-labs/pocket-tts)
+servers you run yourself: `POST {baseUrl}/tts` as multipart with `text` and, for a voice other than
+the server's reference, `voice_url`. The server answers a WAV; the library re-encodes it to MP3.
+Each server speaks one language, so the request language is never sent and the two engines are
+separate ids, each with its own `baseUrl`. Start a server with:
+
+```sh
+pocket-tts serve --port 8890
+```
+
+| option          | meaning                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `baseUrl`       | **Required.** Server root, e.g. `http://127.0.0.1:8890`; the engine appends `/tts`. Must be `http(s)`.                              |
+| `voiceFilesUrl` | Where your own voice samples are served. **Required when `voices` is non-empty**, ignored otherwise.                                |
+| `voices`        | Your own voices, `{ id, label, gender?, version }[]`, appended to the presets.                                                       |
+| `firstByteMs`   | Wait for the response headers. Default 30000 (covers a cold model load).                                                            |
+| `stallMs`       | Gap between body chunks. Default 8000.                                                                                              |
+| `fetch`         | A `fetch` to use instead of the global one.                                                                                          |
+
+It also takes the shared engine fields `maxConcurrent` (default 1), `retries` and `pronunciation`.
+
+```ts
+// Node: an English and a Polish pocket-tts server
+import { createTts } from "anytts/server";
+
+const tts = createTts({
+  engines: {
+    pocket: { baseUrl: "http://127.0.0.1:8890" },       // voices default to { default: "alba" }
+    "pocket-pl": { baseUrl: "http://127.0.0.1:8891" },  // voices default to { default: "shefowl" }
+  },
+  defaultEngine: "pocket",
+  scheduler: { concurrency: 2, tiers: [{ name: "play" }] },
+});
+
+await tts.synthesize({ text: "Good morning.", voice: "alba" });
+await tts.synthesize({ engine: "pocket-pl", text: "Dzień dobry.", voice: "shefowl" });
+```
+
+Notes:
+
+- **Voices.** `pocket` ships 27 English presets (default `alba`): alba, anna, azelma, bill_boerst,
+  caro_davy, charles, cosette, eponine, eve, fantine, george, jane, jean, javert, marius, mary,
+  michael, paul, peter_yearsley, stuart_bell, vera, giovanni, lola, juergen, rafael, daan, estelle;
+  `listVoices("pocket")` returns them with the server down. The genders are best guesses from the
+  names. `pocket-pl` has one voice, the reference voice `shefowl`, used by sending no `voice_url`.
+- **Your own voices** are cloned from a sample the *server* fetches. For a voice `{ id, version }`
+  the library sends `voice_url = {voiceFilesUrl}/{id}/sample.wav?v={version}`, so that URL must be
+  reachable from the pocket-tts server; bump `version` when you replace the sample. A server that
+  cannot clone (a Polish one answering "voice cloning" / "predefined voices") yields
+  `unknown-voice`, which is not retried.
+- **Strict voice map.** A voice outside the presets and `voices` is an `unknown-voice` error, and a
+  `voices` map entry outside them throws `RangeError` at `createTts`.
+- **No word boundaries** and **not keyed**: no `apiKey`, no quota; a refused connection or 5xx is
+  `network`, 429 `rate-limited`, 401 `unauthorized`, any other 4xx `rejected`.
+- **MP3 encoding.** The WAV-to-MP3 step uses [`@breezystack/lamejs`](https://github.com/breezystack/lamejs),
+  which is **LGPL-3.0**. It is a regular dependency but is imported lazily, only when a `pocket` or
+  `pocket-pl` request is encoded, and no other engine loads it. Apps that must avoid LGPL code
+  should not enable the pocket engines.
+
+In the browser `pocket` and `pocket-pl` are relay clients (labelled "Pocket TTS (English)" and
+"Pocket TTS (Polish)") that take `{ relayUrl, firstByteMs?, stallMs? }`; `baseUrl` and
+`voiceFilesUrl` stay on the server, where the relay's `tts` must configure the engine
+(see [Relay protocol](#relay-protocol)):
+
+```ts
+import { createTts } from "anytts";
+
+const browserTts = createTts({
+  engines: { pocket: { relayUrl: "/api/tts" } },
+  defaultEngine: "pocket",
+  scheduler: { concurrency: 2, tiers: [{ name: "play" }] },
+});
+```
 
 ## Cascade
 
