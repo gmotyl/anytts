@@ -181,3 +181,59 @@ describe("anytts/server createTts with openai", () => {
     await expect(second).resolves.toMatchObject({ engine: "openai" });
   });
 });
+
+describe("anytts/server createTts with pocket", () => {
+  const wav = (): Response => {
+    const pcm = new Uint8Array(3200);
+    const buf = new ArrayBuffer(44 + pcm.length);
+    const v = new DataView(buf);
+    const tag = (o: number, t: string) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    tag(0, "RIFF");
+    v.setUint32(4, 36 + pcm.length, true);
+    tag(8, "WAVE");
+    tag(12, "fmt ");
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true);
+    v.setUint32(24, 24000, true);
+    v.setUint32(28, 48000, true);
+    v.setUint16(32, 2, true);
+    v.setUint16(34, 16, true);
+    tag(36, "data");
+    v.setUint32(40, pcm.length, true);
+    new Uint8Array(buf).set(pcm, 44);
+    return new Response(buf, { status: 200, headers: { "content-type": "audio/wav" } });
+  };
+
+  it("node createTts builds pocket engines", async () => {
+    const fetch = vi.fn(async () => wav());
+    const tts = createTts({
+      engines: { pocket: { baseUrl: "http://127.0.0.1:8890", fetch }, "pocket-pl": { baseUrl: "http://127.0.0.1:8891", fetch } },
+      defaultEngine: "pocket",
+      scheduler,
+    });
+    await expect(tts.synthesize({ engine: "pocket", text: "Hello", voice: "alba" })).resolves.toMatchObject({ engine: "pocket", voice: "alba" });
+    await expect(tts.synthesize({ engine: "pocket-pl", text: "Cześć", voice: "shefowl" })).resolves.toMatchObject({ engine: "pocket-pl", voice: "shefowl" });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("a cascade skips an unconfigured pocket", async () => {
+    const spoken: string[] = [];
+    const tts = createTts(
+      { engines: { edge: {}, cascade: { order: ["edge"] } }, defaultEngine: "cascade", scheduler },
+      {
+        engineFactories: {
+          edge: (options: Record<string, unknown>) => ({
+            ...createEdgeEngine(options),
+            synthesize: async (_text: string, voice: string) => {
+              spoken.push(voice);
+              return new Uint8Array([1]).buffer;
+            },
+          }),
+        },
+      },
+    );
+    await expect(tts.synthesize({ text: "hi", order: ["pocket", "edge"] })).resolves.toMatchObject({ engine: "edge" });
+    expect(spoken).toHaveLength(1);
+  });
+});

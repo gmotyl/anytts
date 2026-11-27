@@ -306,6 +306,30 @@ describe("browser openai relay client", () => {
   });
 });
 
+describe("browser pocket relay client", () => {
+  it("browser pocket is a relay client", async () => {
+    const fetchMock = stubRelay((body) => audio(String(body.engine), String(body.voice)));
+    const tts = createTts({ engines: { pocket: { relayUrl: "/api/tts" } }, defaultEngine: "pocket", scheduler });
+    const result = await tts.synthesize({ engine: "pocket", text: "Hello", voice: "alba" });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("/api/tts");
+    expect(JSON.parse(String(init?.body))).toEqual({ engine: "pocket", text: "Hello", voice: "alba" });
+    expect(result).toMatchObject({ engine: "pocket", voice: "alba" });
+  });
+
+  it("browser pocket-pl is a relay client and refuses server-only fields", async () => {
+    const fetchMock = stubRelay((body) => audio(String(body.engine), String(body.voice)));
+    const tts = createTts({ engines: { "pocket-pl": { relayUrl: "/api/tts" } }, defaultEngine: "pocket-pl", scheduler });
+    await tts.synthesize({ engine: "pocket-pl", text: "Cześć", voice: "shefowl" });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]?.body))).toMatchObject({ engine: "pocket-pl" });
+    for (const field of ["apiKey", "baseUrl", "voiceFilesUrl"]) {
+      expect(() => createTts({ engines: { pocket: { relayUrl: "/api/tts", [field]: "x" } }, defaultEngine: "pocket", scheduler })).toThrow(
+        new RegExp(`^pocket runs in the browser through the relay: ${field} stays on the server$`),
+      );
+    }
+  });
+});
+
 describe("browser kokoro relay client", () => {
   const kokoro = (extra: Record<string, unknown> = {}): TtsConfig => ({
     engines: { kokoro: { relayUrl: "/api/tts", ...extra } },

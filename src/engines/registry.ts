@@ -4,6 +4,7 @@ import { CARTESIA_VOICES } from "./cartesia/voices.js";
 import { EDGE_VOICES } from "./edge/voices.js";
 import { ELEVENLABS_VOICES } from "./elevenlabs/voices.js";
 import { KOKORO_VOICES } from "./kokoro/voices.js";
+import { POCKET_PL_PRESETS, POCKET_PRESETS } from "./pocket/voices.js";
 import { SPEECHIFY_VOICES } from "./speechify/voices.js";
 
 export type { VoiceInfo };
@@ -27,6 +28,9 @@ const ENGINES: readonly { info: EngineInfo; voices: readonly VoiceInfo[] }[] = [
   { info: { id: "openai", label: "OpenAI-compatible (custom server)", runtimes: ["node"] }, voices: [] },
   // A user-run server with a fixed model, so its presets are static.
   { info: { id: "kokoro", label: "Kokoro (local server)", runtimes: ["node"] }, voices: KOKORO_VOICES },
+  // User-run pocket-tts servers, one language each; caller voices are added per instance.
+  { info: { id: "pocket", label: "Pocket TTS (English)", runtimes: ["node"] }, voices: POCKET_PRESETS },
+  { info: { id: "pocket-pl", label: "Pocket TTS (Polish)", runtimes: ["node"] }, voices: POCKET_PL_PRESETS },
   // The chain over the other engines: no voices of its own.
   { info: { id: "cascade", label: "Cascade (first engine that answers)", runtimes: ["browser", "node"] }, voices: [] },
 ];

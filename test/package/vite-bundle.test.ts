@@ -21,6 +21,7 @@ const KEYED_MARKERS = [
   // Server-only openai/kokoro engines (the main entry has relay clients for both ids).
   "createOpenAIEngine",
   "createKokoroEngine",
+  "createPocketEngine",
   "/v1/audio/speech",
   "is set by the engine",
 ];

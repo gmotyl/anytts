@@ -6,6 +6,7 @@ import { TtsError, type TtsErrorKind } from "../errors.js";
 import { AZURE_VOICE_MAP, AZURE_VOICES } from "./azure/voices.js";
 import { CARTESIA_VOICE_MAP, CARTESIA_VOICES } from "./cartesia/voices.js";
 import { ELEVENLABS_VOICE_MAP, ELEVENLABS_VOICES } from "./elevenlabs/voices.js";
+import { POCKET_PL_PRESETS, POCKET_PRESETS, pocketCatalog, type PocketVoice } from "./pocket/voices.js";
 import { KOKORO_DEFAULT_VOICE, KOKORO_VOICES } from "./kokoro/voices.js";
 import { SPEECHIFY_VOICE_MAP, SPEECHIFY_VOICES } from "./speechify/voices.js";
 
@@ -21,7 +22,7 @@ export interface RelayFetchOptions {
 export interface RelayEngineOptions {
   /** The relay endpoint (`createRelayHandler` from `anytts/server`). */
   relayUrl: string;
-  /** Max wait for the relay's response headers. Default 8000 (20000 for `cascade` and `openai`, 35000 for `kokoro`). */
+  /** Max wait for the relay's response headers. Default 8000 (20000 for `cascade` and `openai`, 35000 for `kokoro`, `pocket` and `pocket-pl`). */
   firstByteMs?: number;
   /** Max gap between body chunks. Default 8000. */
   stallMs?: number;
@@ -58,6 +59,9 @@ const DEFAULT_CASCADE_FIRST_BYTE_MS = 20000;
 const DEFAULT_OPENAI_FIRST_BYTE_MS = 20000;
 /** Same reasoning for `kokoro`: its Node engine waits 30000 ms (a cold model load). */
 const DEFAULT_KOKORO_FIRST_BYTE_MS = 35000;
+
+/** `pocket` / `pocket-pl`: the Node engine waits 30000 ms (a cold model load), so the browser outlasts it. */
+const DEFAULT_POCKET_FIRST_BYTE_MS = 35000;
 
 const abortError = () => new DOMException("The operation was aborted.", "AbortError");
 
@@ -276,13 +280,32 @@ export function createKokoroRelayEngine(options: KokoroRelayEngineOptions): Engi
   return catalogRelayEngine("kokoro", KOKORO_VOICES, KOKORO_DEFAULT_VOICE, fetchOptions("kokoro", raw, DEFAULT_KOKORO_FIRST_BYTE_MS));
 }
 
-/** The relay clients the main entry registers for the keyed engine ids, `openai` and `kokoro`. */
+/** The browser `pocket` / `pocket-pl` client: the relay options plus the caller voices the relay's engine was given. */
+export interface PocketRelayEngineOptions extends RelayEngineOptions {
+  /** The caller voices configured on the relay's engine; they extend the static presets for local voice checks. */
+  voices?: readonly PocketVoice[];
+  baseUrl?: never;
+  voiceFilesUrl?: never;
+}
+
+/** `pocket` / `pocket-pl` as a relay client: `POST { engine, text, voice, lang? }`. */
+export function createPocketRelayEngine(id: "pocket" | "pocket-pl", options: PocketRelayEngineOptions): Engine {
+  const raw = options as unknown as Record<string, unknown>;
+  refuseServerFields(id, raw, ["apiKey", "baseUrl", "voiceFilesUrl"]);
+  const catalog = pocketCatalog(id, options.voices);
+  const presets = id === "pocket" ? POCKET_PRESETS : POCKET_PL_PRESETS;
+  return catalogRelayEngine(id, catalog, presets[0]!.id, fetchOptions(id, raw, DEFAULT_POCKET_FIRST_BYTE_MS));
+}
+
+/** The relay clients the main entry registers for the keyed engine ids, `openai`, `kokoro` and the pocket engines. */
 export const RELAY_ENGINES: Record<string, (options: Record<string, unknown>) => Engine> = {
   ...Object.fromEntries(
     Object.keys(CATALOGS).map((id) => [id, (options: Record<string, unknown>) => createRelayEngine(id, options as unknown as RelayEngineOptions)]),
   ),
   openai: (options) => createOpenAIRelayEngine(options as unknown as OpenAIRelayEngineOptions),
   kokoro: (options) => createKokoroRelayEngine(options as unknown as KokoroRelayEngineOptions),
+  pocket: (options) => createPocketRelayEngine("pocket", options as unknown as PocketRelayEngineOptions),
+  "pocket-pl": (options) => createPocketRelayEngine("pocket-pl", options as unknown as PocketRelayEngineOptions),
 };
 
 /** A browser cascade request body; the relay walks the chain. */
