@@ -24,6 +24,8 @@ const preset = (id: string, gender: "female" | "male"): VoiceInfo => ({
 });
 
 // pocket-tts 4.0.1 predefined voices; `alba` is the default and comes first.
+// The genders below are inferred from the voice names, not taken from the spec or the pocket-tts
+// docs (VoiceInfo.gender is required, so something has to be filled in). Treat them as best guesses.
 export const POCKET_PRESETS: readonly VoiceInfo[] = [
   preset("alba", "female"),
   preset("anna", "female"),
@@ -66,7 +68,7 @@ export function pocketCatalog(id: PocketId, voices: readonly PocketVoice[] = [])
   const extra = voices.map((v): VoiceInfo => {
     if (taken.has(v.id)) throw new RangeError(`${id}: voice "${v.id}" shadows a preset voice`);
     taken.add(v.id);
-    // VoiceInfo requires a gender; callers that omit it get "female".
+    // VoiceInfo requires a gender; the "female" fallback for callers that omit it is a placeholder, not data.
     return { id: v.id, label: v.label, locale: LOCALE[id], gender: v.gender ?? "female", multilingual: false };
   });
   return [...presets, ...extra];
