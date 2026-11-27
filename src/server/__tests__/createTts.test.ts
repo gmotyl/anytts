@@ -236,4 +236,10 @@ describe("anytts/server createTts with pocket", () => {
     await expect(tts.synthesize({ text: "hi", order: ["pocket", "edge"] })).resolves.toMatchObject({ engine: "edge" });
     expect(spoken).toHaveLength(1);
   });
+
+  it("a config-level cascade order naming an unconfigured pocket throws RangeError", () => {
+    expect(() => createTts({ engines: { edge: {}, cascade: { order: ["pocket"] } }, defaultEngine: "cascade", scheduler })).toThrow(
+      /not a configured engine: pocket/,
+    );
+  });
 });
