@@ -26,6 +26,12 @@ const form = (fetch: FetchMock): Record<string, unknown> => {
 const signal = () => new AbortController().signal;
 
 describe("pocket engine", () => {
+  it.each([".", ".."])("the factory rejects the dot-segment custom voice id %j", (id) => {
+    expect(() =>
+      createPocketEngine("pocket", { baseUrl, voiceFilesUrl: "http://127.0.0.1:8892", customVoices: [{ id, label: "X", version: 1 }] }),
+    ).toThrow(RangeError);
+  });
+
   it("sends text and a preset voice_url as multipart", async () => {
     const fetch = okFetch();
     const engine = createPocketEngine("pocket", { baseUrl, fetch });

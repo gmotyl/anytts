@@ -66,6 +66,8 @@ export function pocketCatalog(id: PocketId, customVoices: readonly PocketVoice[]
   const presets = id === "pocket" ? POCKET_PRESETS : POCKET_PL_PRESETS;
   const taken = new Set(presets.map((v) => v.id));
   const extra = customVoices.map((v): VoiceInfo => {
+    // encodeURIComponent leaves "." and ".." intact, so they would turn `{voiceFilesUrl}/{id}/sample.wav` into another path.
+    if (v.id === "." || v.id === "..") throw new RangeError(`${id}: custom voice id "${v.id}" is a dot-segment`);
     if (taken.has(v.id)) throw new RangeError(`${id}: voice "${v.id}" shadows a preset voice`);
     taken.add(v.id);
     // VoiceInfo requires a gender; the "female" fallback for callers that omit it is a placeholder, not data.

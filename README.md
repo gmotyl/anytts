@@ -498,9 +498,12 @@ Notes:
   should not enable the pocket engines.
 
 In the browser `pocket` and `pocket-pl` are relay clients (labelled "Pocket TTS (English)" and
-"Pocket TTS (Polish)") that take `{ relayUrl, firstByteMs?, stallMs? }`; `baseUrl` and
-`voiceFilesUrl` stay on the server, where the relay's `tts` must configure the engine
-(see [Relay protocol](#relay-protocol)):
+"Pocket TTS (Polish)") that take `{ relayUrl, customVoices?, firstByteMs?, stallMs? }`; `baseUrl`, `voiceFilesUrl`
+and `apiKey` stay on the server, where the relay's `tts` must configure the engine
+(see [Relay protocol](#relay-protocol)). Pass `customVoices` in the browser too, so `createTts` can
+validate a custom voice locally; without it synthesis rejects `unknown-voice` before reaching the
+relay. The metadata must match the server's catalog. Custom voice ids `.` and `..` are rejected
+with `RangeError`.
 
 ```ts
 import { createTts } from "anytts";

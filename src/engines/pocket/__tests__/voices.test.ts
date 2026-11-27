@@ -22,6 +22,10 @@ describe("pocketCatalog", () => {
     expect(voices[0]).toMatchObject({ id: "shefowl", label: "Polski (wzorzec)", locale: "pl-PL", multilingual: false });
   });
 
+  it.each([".", ".."])("rejects the dot-segment custom voice id %j", (id) => {
+    expect(() => pocketCatalog("pocket", [{ id, label: "X", version: 1 }])).toThrow(RangeError);
+  });
+
   it("caller voices take the engine's locale", () => {
     const piotr = { id: "piotr", label: "Piotr", gender: "male" as const, version: 1 };
     const en = pocketCatalog("pocket", [piotr]).find((v) => v.id === "piotr");

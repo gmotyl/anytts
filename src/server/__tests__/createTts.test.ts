@@ -270,6 +270,11 @@ describe("anytts/server createTts with pocket", () => {
     expect((fetch.mock.calls[0]![1]?.body as FormData).get("voice_url")).toBe("http://127.0.0.1:8892/piotr/sample.wav?v=1764245000000");
   });
 
+  it.each([".", ".."])("createTts rejects the dot-segment custom voice id %j with RangeError", (id) => {
+    const fetch = vi.fn();
+    expect(() => createTts(pocketPl({ customVoices: [{ id, label: "X", version: 1 }] }, fetch as unknown as typeof globalThis.fetch))).toThrow(RangeError);
+  });
+
   it("customVoices without voiceFilesUrl throws RangeError through createTts", () => {
     const fetch = vi.fn(async () => wav());
     expect(() =>
