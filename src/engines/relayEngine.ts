@@ -283,7 +283,7 @@ export function createKokoroRelayEngine(options: KokoroRelayEngineOptions): Engi
 /** The browser `pocket` / `pocket-pl` client: the relay options plus the caller voices the relay's engine was given. */
 export interface PocketRelayEngineOptions extends RelayEngineOptions {
   /** The caller voices configured on the relay's engine; they extend the static presets for local voice checks. */
-  voices?: readonly PocketVoice[];
+  customVoices?: readonly PocketVoice[];
   baseUrl?: never;
   voiceFilesUrl?: never;
 }
@@ -292,7 +292,7 @@ export interface PocketRelayEngineOptions extends RelayEngineOptions {
 export function createPocketRelayEngine(id: "pocket" | "pocket-pl", options: PocketRelayEngineOptions): Engine {
   const raw = options as unknown as Record<string, unknown>;
   refuseServerFields(id, raw, ["apiKey", "baseUrl", "voiceFilesUrl"]);
-  const catalog = pocketCatalog(id, options.voices);
+  const catalog = pocketCatalog(id, options.customVoices);
   const presets = id === "pocket" ? POCKET_PRESETS : POCKET_PL_PRESETS;
   return catalogRelayEngine(id, catalog, presets[0]!.id, fetchOptions(id, raw, DEFAULT_POCKET_FIRST_BYTE_MS));
 }

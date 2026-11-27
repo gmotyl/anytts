@@ -73,7 +73,7 @@ export async function encodeMp3(pcm: Pcm, kbps?: number): Promise<Uint8Array>; /
 **Contract:**
 ```ts
 export interface PocketVoice { id: string; label: string; gender?: "female" | "male"; version: number }
-export function pocketCatalog(id: "pocket" | "pocket-pl", voices?: readonly PocketVoice[]): VoiceInfo[];
+export function pocketCatalog(id: "pocket" | "pocket-pl", customVoices?: readonly PocketVoice[]): VoiceInfo[];
 ```
 
 **Acceptance criteria:**
@@ -105,8 +105,8 @@ export function pocketCatalog(id: "pocket" | "pocket-pl", voices?: readonly Pock
 ```ts
 export interface PocketEngineOptions {
   baseUrl: string;            // required, http(s)
-  voiceFilesUrl?: string;     // required when voices is non-empty
-  voices?: readonly PocketVoice[];
+  voiceFilesUrl?: string;     // required when customVoices is non-empty
+  customVoices?: readonly PocketVoice[];
   firstByteMs?: number;       // default 30000
   stallMs?: number;
   fetch?: typeof fetch;
@@ -123,7 +123,7 @@ export function createPocketEngine(id: "pocket" | "pocket-pl", options: PocketEn
   `{voiceFilesUrl}/piotr/sample.wav?v=1764245000000`, with the id URI-encoded.
 - WHEN `pocket-pl` synthesizes with `shefowl` or with no voice THEN the form has no `voice_url`.
 - WHEN a request carries `lang` THEN no language field is sent.
-- WHEN `baseUrl` is missing or not http(s), or `voices` is non-empty without `voiceFilesUrl` THEN
+- WHEN `baseUrl` is missing or not http(s), or `customVoices` is non-empty without `voiceFilesUrl` THEN
   the factory throws `RangeError`.
 - WHEN the server answers 500 with a body containing `voice cloning` or `predefined voices` THEN it
   rejects `unknown-voice`; any other 5xx rejects `network`; a 4xx rejects `rejected`.
@@ -158,7 +158,7 @@ export function createPocketEngine(id: "pocket" | "pocket-pl", options: PocketEn
 - WHEN `listVoices("pocket")` is read THEN it returns the 27 presets.
 - WHEN a Node `createTts` gets `engines: { pocket: { baseUrl }, "pocket-pl": { baseUrl } }` THEN
   both synthesize through the factory from Task 3.
-- WHEN a browser `createTts` gets `engines: { pocket: { relay: "/api/tts" } }` THEN synthesis POSTs
+- WHEN a browser `createTts` gets `engines: { pocket: { relayUrl: "/api/tts" } }` THEN synthesis POSTs
   the relay with `engine: "pocket"`.
 - WHEN a cascade lists `pocket` with no `baseUrl` configured THEN it is skipped as not configured,
   as `kokoro` is.

@@ -10,10 +10,10 @@ import { pocketCatalog, type PocketVoice } from "./voices.js";
 export interface PocketEngineOptions {
   /** Server root, e.g. "http://127.0.0.1:8890". Required, http(s). */
   baseUrl: string;
-  /** Where caller voice samples are served; required when `voices` is non-empty. */
+  /** Where caller voice samples are served; required when `customVoices` is non-empty. */
   voiceFilesUrl?: string;
   /** Caller voices, appended to the presets. */
-  voices?: readonly PocketVoice[];
+  customVoices?: readonly PocketVoice[];
   /** Max wait for the response headers. Default 30000 (covers a cold model load). */
   firstByteMs?: number;
   /** Max gap between body chunks. Default: keyedFetch's (8000). */
@@ -55,19 +55,19 @@ export function createPocketEngine(
   strictVoiceMap: true;
   defaults: { voices: VoiceMap; maxConcurrent: number };
 } {
-  const { baseUrl, voiceFilesUrl, voices = [], firstByteMs = 30000, stallMs, fetch } = options ?? ({} as PocketEngineOptions);
+  const { baseUrl, voiceFilesUrl, customVoices = [], firstByteMs = 30000, stallMs, fetch } = options ?? ({} as PocketEngineOptions);
   const endpoint = httpUrl(id, "baseUrl", baseUrl);
   endpoint.pathname = `${trimSlashes(endpoint.pathname)}/tts`;
   endpoint.hash = "";
   const url = endpoint.toString();
 
   let filesBase: string | undefined;
-  if (voices.length > 0) {
+  if (customVoices.length > 0) {
     const files = httpUrl(id, "voiceFilesUrl", voiceFilesUrl);
     filesBase = `${files.origin}${trimSlashes(files.pathname)}`;
   }
-  const catalog = pocketCatalog(id, voices);
-  const callerVoices = new Map(voices.map((v) => [v.id, v]));
+  const catalog = pocketCatalog(id, customVoices);
+  const callerVoices = new Map(customVoices.map((v) => [v.id, v]));
   const fetchOptions = { firstByteMs, stallMs, fetch };
 
   const rules: RefusalRules = {

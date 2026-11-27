@@ -2,7 +2,7 @@
 
 ### Requirement: The pocket engines speak to a pocket-tts server and answer MP3
 `anytts/server` registers `pocket` and `pocket-pl`, configured as
-`{ baseUrl, voiceFilesUrl?, voices?, maxConcurrent?, pronunciation?, retries?, firstByteMs?, stallMs?, fetch? }`.
+`{ baseUrl, voiceFilesUrl?, customVoices?, voices?, maxConcurrent?, pronunciation?, retries?, firstByteMs?, stallMs?, fetch? }`.
 Each synthesizes with a multipart `POST {baseUrl}/tts` and answers with MP3 bytes encoded from the
 WAV reply. Both report `keyed: false` and `strictVoiceMap: true`, and default to `maxConcurrent: 1`.
 
@@ -12,7 +12,7 @@ WAV reply. Both report `keyed: false` and `strictVoiceMap: true`, and default to
 - **THEN** one `POST http://127.0.0.1:8890/tts` is sent with form fields `text=Hello` and `voice_url=alba`, and the result is MP3 bytes starting with an MP3 frame sync
 
 #### Scenario: A caller-supplied voice
-- **GIVEN** `pocket-pl` configured with `voiceFilesUrl: "http://127.0.0.1:8892"` and `voices: [{ id: "piotr", label: "Piotr", gender: "male", version: 1764245000000 }]`
+- **GIVEN** `pocket-pl` configured with `voiceFilesUrl: "http://127.0.0.1:8892"` and `customVoices: [{ id: "piotr", label: "Piotr", gender: "male", version: 1764245000000 }]`
 - **WHEN** `{ engine: "pocket-pl", text: "Cześć", voice: "piotr" }` is synthesized
 - **THEN** `voice_url` is `http://127.0.0.1:8892/piotr/sample.wav?v=1764245000000`
 
@@ -25,7 +25,7 @@ WAV reply. Both report `keyed: false` and `strictVoiceMap: true`, and default to
 - **THEN** the form has only `text` and, where applicable, `voice_url`
 
 #### Scenario: A caller voice without a voice-file address
-- **WHEN** `voices` is non-empty and `voiceFilesUrl` is missing
+- **WHEN** `customVoices` is non-empty and `voiceFilesUrl` is missing
 - **THEN** `createTts` throws `RangeError`
 
 #### Scenario: A voice outside the catalog
@@ -37,7 +37,7 @@ WAV reply. Both report `keyed: false` and `strictVoiceMap: true`, and default to
 `caro_davy`, `charles`, `cosette`, `eponine`, `eve`, `fantine`, `george`, `jane`, `jean`, `javert`,
 `marius`, `mary`, `michael`, `paul`, `peter_yearsley`, `stuart_bell`, `vera`, `giovanni`, `lola`,
 `juergen`, `rafael`, `daan`, `estelle`), default `alba`. `pocket-pl` lists `shefowl`, default
-`shefowl`. Caller `voices` are appended. Every voice of `pocket` has locale `en-US`, and every voice
+`shefowl`. Caller `customVoices` are appended. Every voice of `pocket` has locale `en-US`, and every voice
 of `pocket-pl` has locale `pl-PL`.
 
 #### Scenario: Static catalog

@@ -451,13 +451,13 @@ pocket-tts serve --port 8890
 | option          | meaning                                                                                                                              |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `baseUrl`       | **Required.** Server root, e.g. `http://127.0.0.1:8890`; the engine appends `/tts`. Must be `http(s)`.                              |
-| `voiceFilesUrl` | Where your own voice samples are served. **Required when `voices` is non-empty**, ignored otherwise.                                |
-| `voices`        | Your own voices, `{ id, label, gender?, version }[]`, appended to the presets.                                                       |
+| `voiceFilesUrl` | Where your own voice samples are served. **Required when `customVoices` is non-empty**, ignored otherwise.                              |
+| `customVoices`  | Your own voices, `{ id, label, gender?, version }[]`, appended to the presets.                                                       |
 | `firstByteMs`   | Wait for the response headers. Default 30000 (covers a cold model load).                                                            |
 | `stallMs`       | Gap between body chunks. Default 8000.                                                                                              |
 | `fetch`         | A `fetch` to use instead of the global one.                                                                                          |
 
-It also takes the shared engine fields `maxConcurrent` (default 1), `retries` and `pronunciation`.
+It also takes the shared engine fields `voices` (the language-to-voice map, which may name a custom voice), `maxConcurrent` (default 1), `retries` and `pronunciation`.
 
 ```ts
 // Node: an English and a Polish pocket-tts server
@@ -488,7 +488,7 @@ Notes:
   reachable from the pocket-tts server; bump `version` when you replace the sample. A server that
   cannot clone (a Polish one answering "voice cloning" / "predefined voices") yields
   `unknown-voice`, which is not retried.
-- **Strict voice map.** A voice outside the presets and `voices` is an `unknown-voice` error, and a
+- **Strict voice map.** A voice outside the presets and `customVoices` is an `unknown-voice` error, and a
   `voices` map entry outside them throws `RangeError` at `createTts`.
 - **No word boundaries** and **not keyed**: no `apiKey`, no quota; a refused connection or 5xx is
   `network`, 429 `rate-limited`, 401 `unauthorized`, any other 4xx `rejected`.

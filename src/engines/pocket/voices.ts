@@ -62,10 +62,10 @@ export const POCKET_PL_PRESETS: readonly VoiceInfo[] = [
 ];
 
 /** Presets plus caller voices, all carrying the engine's locale. */
-export function pocketCatalog(id: PocketId, voices: readonly PocketVoice[] = []): VoiceInfo[] {
+export function pocketCatalog(id: PocketId, customVoices: readonly PocketVoice[] = []): VoiceInfo[] {
   const presets = id === "pocket" ? POCKET_PRESETS : POCKET_PL_PRESETS;
   const taken = new Set(presets.map((v) => v.id));
-  const extra = voices.map((v): VoiceInfo => {
+  const extra = customVoices.map((v): VoiceInfo => {
     if (taken.has(v.id)) throw new RangeError(`${id}: voice "${v.id}" shadows a preset voice`);
     taken.add(v.id);
     // VoiceInfo requires a gender; the "female" fallback for callers that omit it is a placeholder, not data.

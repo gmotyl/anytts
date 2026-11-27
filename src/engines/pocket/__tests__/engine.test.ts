@@ -45,7 +45,7 @@ describe("pocket engine", () => {
     const engine = createPocketEngine("pocket-pl", {
       baseUrl,
       voiceFilesUrl: "http://127.0.0.1:8892",
-      voices: [{ id: "piotr", label: "Piotr", gender: "male", version: 1764245000000 }],
+      customVoices: [{ id: "piotr", label: "Piotr", gender: "male", version: 1764245000000 }],
       fetch,
     });
     await engine.synthesize("Cześć", "piotr", signal());
@@ -58,7 +58,7 @@ describe("pocket engine", () => {
     await createPocketEngine("pocket", {
       baseUrl,
       voiceFilesUrl: "http://127.0.0.1:8892/",
-      voices: [{ id: "a b/ć", label: "X", version: 1 }],
+      customVoices: [{ id: "a b/ć", label: "X", version: 1 }],
       fetch: odd,
     }).synthesize("x", "a b/ć", signal());
     expect(form(odd).voice_url).toBe(`http://127.0.0.1:8892/${encodeURIComponent("a b/ć")}/sample.wav?v=1`);
@@ -79,13 +79,13 @@ describe("pocket engine", () => {
   });
 
   it("refuses a bad baseUrl and caller voices without voiceFilesUrl", () => {
-    const voices = [{ id: "piotr", label: "Piotr", version: 1 }];
+    const customVoices = [{ id: "piotr", label: "Piotr", version: 1 }];
     expect(() => createPocketEngine("pocket", {} as never)).toThrow(RangeError);
     expect(() => createPocketEngine("pocket", { baseUrl: "" })).toThrow(RangeError);
     expect(() => createPocketEngine("pocket", { baseUrl: "ftp://x" })).toThrow(RangeError);
     expect(() => createPocketEngine("pocket", { baseUrl: "nope" })).toThrow(RangeError);
-    expect(() => createPocketEngine("pocket", { baseUrl, voices })).toThrow(RangeError);
-    expect(() => createPocketEngine("pocket", { baseUrl, voices, voiceFilesUrl: "http://x" })).not.toThrow();
+    expect(() => createPocketEngine("pocket", { baseUrl, customVoices })).toThrow(RangeError);
+    expect(() => createPocketEngine("pocket", { baseUrl, customVoices, voiceFilesUrl: "http://x" })).not.toThrow();
   });
 
   it("rejects a voice outside the catalog without a request", async () => {
